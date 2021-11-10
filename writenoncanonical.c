@@ -78,7 +78,6 @@ int main(int argc, char **argv)
   linkLayer SET_FRAME = {"/dev/ttyS10", 0, 1, 3, 3, {FLAG, AEMISS, CSET, BEMISS_SET, FLAG}};
 
   struct termios oldtio, newtio;
-  char buf[255];
 
   /* if ((argc < 2) ||
       ((strcmp("/dev/ttyS10", argv[1]) != 0) &&
@@ -92,20 +91,6 @@ int main(int argc, char **argv)
     Open serial port device for reading and writing and not as controlling tty
     because we don't want to get killed if linenoise sends CTRL-C.
   */
-
-  /* fd = open(SET_FRAME.port, O_RDWR | O_NOCTTY);
-  if (fd < 0)
-  {
-    perror(argv[1]);
-    exit(-1);
-  }
-
-  if (tcgetattr(fd, &oldtio) == -1)
-  { save current port settings 
-  perror("tcgetattr");
-  exit(-1);
-}
-*/
 
   int SET_FRAME_PORT = open(SET_FRAME.port, O_RDWR | O_NOCTTY);
   if (SET_FRAME_PORT < 0)
@@ -136,14 +121,6 @@ int main(int argc, char **argv)
     leitura do(s) pr�ximo(s) caracter(es)
   */
 
-  /* tcflush(fd, TCIOFLUSH);
-
-  if (tcsetattr(fd, TCSANOW, &newtio) == -1)
-  {
-    perror("tcsetattr");
-    exit(-1);
-  } */
-
   tcflush(SET_FRAME_PORT, TCIOFLUSH);
 
   if (tcsetattr(SET_FRAME_PORT, TCSANOW, &newtio) == -1)
@@ -154,14 +131,13 @@ int main(int argc, char **argv)
 
   char ua_frame_receptor[1];
   char ua_frame[5];
-  strcpy(buf, SET_FRAME.frame);
 
   (void)signal(SIGALRM, pickup);
   //ESTABLISHING CONNECTION
   while (count++ < 3)
   {
     //SEND SET FRAME
-    write(SET_FRAME_PORT, buf, 5);
+    write(SET_FRAME_PORT, SET_FRAME.frame, 5);
 
     //STATE MACHINE - READING UA_FRAME
     int z = 0, ua_frame_received;
@@ -233,11 +209,6 @@ int main(int argc, char **argv)
       printf("Connection has been established..\n");
       break;
     }
-    /* if (ua_frame_received > 0 && ua_frame[2] - hex_to_int(CUA) == 0)
-    {
-      printf("UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d\nConnection has been established..\n", ua_frame[0], ua_frame[1], ua_frame[2], ua_frame[3]);
-      break;
-    } */
   }
 
   if (tcsetattr(SET_FRAME_PORT, TCSANOW, &oldtio) == -1)

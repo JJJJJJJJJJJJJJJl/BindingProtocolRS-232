@@ -68,7 +68,6 @@ int hex_to_int(int decimalnum)
 int main(int argc, char **argv)
 {
   linkLayer UA_FRAME = {"/dev/ttyS11", 0, 1, 3, 3, {FLAG, AEMISS, CUA, BEMISS_UA, FLAG}};
-  int fd;
   struct termios oldtio, newtio;
   char buf[255];
 
@@ -84,19 +83,6 @@ int main(int argc, char **argv)
     Open serial port device for reading and writing and not as controlling tty
     because we don't want to get killed if linenoise sends CTRL-C.
   */
-
-  fd = open(UA_FRAME.port, O_RDWR | O_NOCTTY);
-  if (fd < 0)
-  {
-    perror(argv[1]);
-    exit(-1);
-  }
-
-  if (tcgetattr(fd, &oldtio) == -1)
-  { /* save current port settings */
-    perror("tcgetattr");
-    exit(-1);
-  }
 
   int UA_FRAME_PORT = open(UA_FRAME.port, O_RDWR | O_NOCTTY);
   if (UA_FRAME_PORT < 0)
@@ -127,9 +113,9 @@ int main(int argc, char **argv)
     leitura do(s) pr�ximo(s) caracter(es)
   */
 
-  tcflush(fd, TCIOFLUSH);
+  tcflush(UA_FRAME_PORT, TCIOFLUSH);
 
-  if (tcsetattr(fd, TCSANOW, &newtio) == -1)
+  if (tcsetattr(UA_FRAME_PORT, TCSANOW, &newtio) == -1)
   {
     perror("tcsetattr");
     exit(-1);
@@ -140,7 +126,7 @@ int main(int argc, char **argv)
   while (1)
   {
     //GET SET_FRAME
-    set_frame_received = read(fd, buf, 5);
+    set_frame_received = read(UA_FRAME_PORT, buf, 5);
     printf("SET_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d | FLAG: %d\n", buf[0], buf[1], buf[2], buf[3], buf[4]);
     buf[set_frame_received] = '\0'; // not sure if completely necessary
 
@@ -153,8 +139,7 @@ int main(int argc, char **argv)
     }
   }
 
-  tcsetattr(fd, TCSANOW, &oldtio);
-  close(fd);
+  tcsetattr(UA_FRAME_PORT, TCSANOW, &oldtio);
   close(UA_FRAME_PORT);
   return 0;
 }
