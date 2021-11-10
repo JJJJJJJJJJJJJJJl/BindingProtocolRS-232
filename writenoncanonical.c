@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <signal.h>
 
 #define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS1"
@@ -62,15 +63,20 @@ int hex_to_int(int decimalnum)
       hexadecimalnum[j++] = 55 + remainder;
     quotient = quotient / 16;
   }
+  printf("AAA: %d\n", atoi(hexadecimalnum));
   return atoi(hexadecimalnum);
+}
+int count = 0;
+void pickup() // atende alarme
+{
+  printf("alarm #%d\n", count);
+  count++;
 }
 
 int main(int argc, char **argv)
 {
-
   linkLayer SET_FRAME = {"/dev/ttyS10", 0, 1, 3, 3, {FLAG, AEMISS, CSET, BEMISS_SET, FLAG}};
 
-  int fd;
   struct termios oldtio, newtio;
   char buf[255];
 
@@ -87,7 +93,7 @@ int main(int argc, char **argv)
     because we don't want to get killed if linenoise sends CTRL-C.
   */
 
-  fd = open(SET_FRAME.port, O_RDWR | O_NOCTTY);
+  /* fd = open(SET_FRAME.port, O_RDWR | O_NOCTTY);
   if (fd < 0)
   {
     perror(argv[1]);
@@ -95,10 +101,11 @@ int main(int argc, char **argv)
   }
 
   if (tcgetattr(fd, &oldtio) == -1)
-  { /* save current port settings */
-    perror("tcgetattr");
-    exit(-1);
-  }
+  { save current port settings 
+  perror("tcgetattr");
+  exit(-1);
+}
+*/
 
   int SET_FRAME_PORT = open(SET_FRAME.port, O_RDWR | O_NOCTTY);
   if (SET_FRAME_PORT < 0)
@@ -121,47 +128,124 @@ int main(int argc, char **argv)
   /* set input mode (non-canonical, no echo,...) */
   newtio.c_lflag = 0;
 
-  newtio.c_cc[VTIME] = 0; /* inter-character timer unused */
-  newtio.c_cc[VMIN] = 5;  /* blocking read until 5 chars received */
+  newtio.c_cc[VTIME] = 1; /* inter-character timer unused */
+  newtio.c_cc[VMIN] = 0;  /* blocking read until 5 chars received */
 
   /* 
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
     leitura do(s) pr�ximo(s) caracter(es)
   */
 
-  tcflush(fd, TCIOFLUSH);
+  /* tcflush(fd, TCIOFLUSH);
 
   if (tcsetattr(fd, TCSANOW, &newtio) == -1)
   {
     perror("tcsetattr");
     exit(-1);
-  }
+  } */
 
-  char ua_frame[255];
-  strcpy(buf, SET_FRAME.frame);
-  while (1)
-  {
-    //SEND SET FRAME
-    write(fd, buf, 255);
+  tcflush(SET_FRAME_PORT, TCIOFLUSH);
 
-    //GET UA FRAME
-    int ua_frame_received = read(SET_FRAME_PORT, ua_frame, 255);
-    if (ua_frame_received > 0 && ua_frame[2] - hex_to_int(CUA) == 0)
-    {
-      printf("UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d\n", ua_frame[0], ua_frame[1], ua_frame[2], ua_frame[3]);
-      break;
-    }
-
-    sleep(SET_FRAME.timeout);
-  }
-
-  if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
+  if (tcsetattr(SET_FRAME_PORT, TCSANOW, &newtio) == -1)
   {
     perror("tcsetattr");
     exit(-1);
   }
 
-  close(fd);
+  char ua_frame_receptor[1];
+  char ua_frame[5];
+  strcpy(buf, SET_FRAME.frame);
+
+  (void)signal(SIGALRM, pickup);
+  //ESTABLISHING CONNECTION
+  while (count++ < 3)
+  {
+    //SEND SET FRAME
+    write(SET_FRAME_PORT, buf, 5);
+
+    //STATE MACHINE - READING UA_FRAME
+    int z = 0, ua_frame_received;
+    while (z != 5)
+    {
+      alarm(SET_FRAME.timeout);
+      //fprintf(stderr, "1\n");
+      ua_frame_received = read(SET_FRAME_PORT, ua_frame_receptor, 1);
+      //fprintf(stderr, "2\n");
+      if (ua_frame_received > 0)
+      {
+        //checking flag values
+        if (z == 0 || z == 4)
+        {
+          if (ua_frame_receptor[0] == FLAG)
+          {
+            ua_frame[z++] = ua_frame_receptor[0];
+          }
+          else
+          {
+            memset(ua_frame, 0, sizeof(ua_frame));
+            break;
+          }
+        }
+        //checking A value
+        else if (z == 1)
+        {
+          if (ua_frame_receptor[0] == AEMISS)
+          {
+            ua_frame[z++] = ua_frame_receptor[0];
+          }
+          else
+          {
+            memset(ua_frame, 0, sizeof(ua_frame));
+            break;
+          }
+        }
+        //checking C value else if (z == 2)
+        else if (z == 2)
+        {
+          if (ua_frame_receptor[0] == CUA)
+          {
+            ua_frame[z++] = ua_frame_receptor[0];
+          }
+          else
+          {
+            memset(ua_frame, 0, sizeof(ua_frame));
+            break;
+          }
+        }
+        //checking BCC value
+        else
+        {
+          if (ua_frame_receptor[0] == (BEMISS_UA))
+          {
+            ua_frame[z++] = ua_frame_receptor[0];
+          }
+          else
+          {
+            memset(ua_frame, 0, sizeof(ua_frame));
+            break;
+          }
+        }
+      }
+    }
+    if (ua_frame[0] == FLAG && ua_frame[1] == AEMISS && ua_frame[2] == CUA && ua_frame[3] == (BEMISS_UA) && ua_frame[4] == FLAG)
+    {
+      printf("UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d | FLAG: %d\n", ua_frame[0], ua_frame[1], ua_frame[2], ua_frame[3], ua_frame[4]);
+      printf("Connection has been established..\n");
+      break;
+    }
+    /* if (ua_frame_received > 0 && ua_frame[2] - hex_to_int(CUA) == 0)
+    {
+      printf("UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d\nConnection has been established..\n", ua_frame[0], ua_frame[1], ua_frame[2], ua_frame[3]);
+      break;
+    } */
+  }
+
+  if (tcsetattr(SET_FRAME_PORT, TCSANOW, &oldtio) == -1)
+  {
+    perror("tcsetattr");
+    exit(-1);
+  }
+
   close(SET_FRAME_PORT);
   return 0;
 }

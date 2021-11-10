@@ -19,6 +19,7 @@
 #define ARECEPT 0x01
 #define CSET 0x03
 #define CUA 0x07
+#define ERROR 0x00
 #define BEMISS_SET AEMISS ^ CSET
 #define BRECEPT_SET ARECEPT ^ CSET
 #define BEMISS_UA AEMISS ^ CUA
@@ -43,6 +44,26 @@ typedef struct
 } linkLayer;
 
 volatile int STOP = FALSE;
+
+int hex_to_int(int decimalnum)
+{
+  int quotient, remainder;
+  int j = 0;
+  char hexadecimalnum[100];
+
+  quotient = decimalnum;
+
+  while (quotient != 0)
+  {
+    remainder = quotient % 16;
+    if (remainder < 10)
+      hexadecimalnum[j++] = 48 + remainder;
+    else
+      hexadecimalnum[j++] = 55 + remainder;
+    quotient = quotient / 16;
+  }
+  return atoi(hexadecimalnum);
+}
 
 int main(int argc, char **argv)
 {
@@ -98,8 +119,8 @@ int main(int argc, char **argv)
   /* set input mode (non-canonical, no echo,...) */
   newtio.c_lflag = 0;
 
-  newtio.c_cc[VTIME] = 0; /* inter-character timer unused */
-  newtio.c_cc[VMIN] = 5;  /* blocking read until 5 chars received */
+  newtio.c_cc[VTIME] = 1; /* inter-character timer unused */
+  newtio.c_cc[VMIN] = 0;  /* blocking read until 5 chars received */
 
   /* 
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
@@ -115,17 +136,18 @@ int main(int argc, char **argv)
   }
 
   int set_frame_received;
+  //ESTABLISHING CONNECTION
   while (1)
   {
     //GET SET_FRAME
-    set_frame_received = read(fd, buf, 255);
-    printf("FLAG: %d | A: %d | C: %d | B: %d\n", buf[0], buf[1], buf[2], buf[3]);
+    set_frame_received = read(fd, buf, 5);
+    printf("SET_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d | FLAG: %d\n", buf[0], buf[1], buf[2], buf[3], buf[4]);
     buf[set_frame_received] = '\0'; // not sure if completely necessary
 
     //SEND UA FRAME - only if SET_FRAME WAS RECEIVED
-    if (set_frame_received > 0)
+    if (set_frame_received > 0 && buf[2] == hex_to_int(CSET))
     {
-      write(UA_FRAME_PORT, UA_FRAME.frame, 255);
+      write(UA_FRAME_PORT, UA_FRAME.frame, 5);
       printf("Connection has been established..\n");
       break;
     }
