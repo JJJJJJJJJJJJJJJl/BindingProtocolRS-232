@@ -48,7 +48,7 @@ volatile int STOP = FALSE;
 int hex_to_int(int decimalnum)
 {
   int quotient, remainder;
-  int i, j = 0;
+  int j = 0;
   char hexadecimalnum[100];
 
   quotient = decimalnum;
@@ -70,10 +70,9 @@ int main(int argc, char **argv)
 
   linkLayer SET_FRAME = {"/dev/ttyS10", 0, 1, 3, 3, {FLAG, AEMISS, CSET, BEMISS_SET, FLAG}};
 
-  int fd, c, res;
+  int fd;
   struct termios oldtio, newtio;
   char buf[255];
-  int i, sum = 0, speed = 0;
 
   /* if ((argc < 2) ||
       ((strcmp("/dev/ttyS10", argv[1]) != 0) &&
@@ -147,7 +146,7 @@ int main(int argc, char **argv)
 
     //GET UA FRAME
     int ua_frame_received = read(SET_FRAME_PORT, ua_frame, 255);
-    if (ua_frame[2] - hex_to_int(CUA) == 0)
+    if (ua_frame_received > 0 && ua_frame[2] - hex_to_int(CUA) == 0)
     {
       printf("UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d\n", ua_frame[0], ua_frame[1], ua_frame[2], ua_frame[3]);
       break;

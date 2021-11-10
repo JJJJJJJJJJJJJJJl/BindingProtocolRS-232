@@ -47,7 +47,7 @@ volatile int STOP = FALSE;
 int main(int argc, char **argv)
 {
   linkLayer UA_FRAME = {"/dev/ttyS11", 0, 1, 3, 3, {FLAG, AEMISS, CUA, BEMISS_UA, FLAG}};
-  int fd, c, res;
+  int fd;
   struct termios oldtio, newtio;
   char buf[255];
 
