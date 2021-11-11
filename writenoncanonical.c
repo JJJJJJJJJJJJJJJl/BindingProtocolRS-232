@@ -79,19 +79,6 @@ int main(int argc, char **argv)
 
   struct termios oldtio, newtio;
 
-  /* if ((argc < 2) ||
-      ((strcmp("/dev/ttyS10", argv[1]) != 0) &&
-       (strcmp("/dev/ttyS11", argv[1]) != 0)))
-  {
-    printf("Usage:\tnserial SerialPort\n\tex: nserial /dev/ttyS1\n");
-    exit(1);
-  } */
-
-  /*
-    Open serial port device for reading and writing and not as controlling tty
-    because we don't want to get killed if linenoise sends CTRL-C.
-  */
-
   int SET_FRAME_PORT = open(SET_FRAME.port, O_RDWR | O_NOCTTY);
   if (SET_FRAME_PORT < 0)
   {
