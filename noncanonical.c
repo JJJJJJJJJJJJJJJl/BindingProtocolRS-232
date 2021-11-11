@@ -131,7 +131,7 @@ int main(int argc, char **argv)
     buf[set_frame_received] = '\0'; // not sure if completely necessary
 
     //SEND UA FRAME - only if SET_FRAME WAS RECEIVED
-    if (set_frame_received > 0 && buf[2] == hex_to_int(CSET))
+    if (set_frame_received > 0 && buf[2] == CSET)
     {
       write(UA_FRAME_PORT, UA_FRAME.frame, 5);
       printf("Connection has been established..\n");

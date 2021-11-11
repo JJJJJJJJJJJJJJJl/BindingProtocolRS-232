@@ -129,35 +129,51 @@ int main(int argc, char **argv)
     exit(-1);
   }
 
+  int z = 0;
   char ua_frame_receptor[1];
   char ua_frame[5];
 
   (void)signal(SIGALRM, pickup);
   //ESTABLISHING CONNECTION
-  while (count++ < 3)
+  while (count < 3)
   {
     //SEND SET FRAME
     write(SET_FRAME_PORT, SET_FRAME.frame, 5);
 
     //STATE MACHINE - READING UA_FRAME
-    int z = 0, ua_frame_received;
+    int ua_frame_received;
     while (z != 5)
     {
+
       alarm(SET_FRAME.timeout);
-      //fprintf(stderr, "1\n");
+
+      //if UA_FRAME has been resent first it needs to read whats already correct
+      //essetially skipping buffer data to correct position
+      //eg.:Last time it was processing UA_FRAME C had an error, so FLAG + A are correct,
+      //but new UA_FRAME has been sent so we skip FLAG + A on the new buffer
+      if (count != 0)
+      {
+        for (int j = 0; j < z; j++)
+        {
+          read(SET_FRAME_PORT, ua_frame_receptor, 1);
+        }
+      }
+
       ua_frame_received = read(SET_FRAME_PORT, ua_frame_receptor, 1);
-      //fprintf(stderr, "2\n");
       if (ua_frame_received > 0)
       {
         //checking flag values
         if (z == 0 || z == 4)
         {
+          //FLAG received,save and move on
           if (ua_frame_receptor[0] == FLAG)
           {
             ua_frame[z++] = ua_frame_receptor[0];
           }
+          //something else received, so it goes back to start
           else
           {
+            z = 0;
             memset(ua_frame, 0, sizeof(ua_frame));
             break;
           }
@@ -165,25 +181,45 @@ int main(int argc, char **argv)
         //checking A value
         else if (z == 1)
         {
+          //A received, save and move on
           if (ua_frame_receptor[0] == AEMISS)
           {
             ua_frame[z++] = ua_frame_receptor[0];
           }
+          //FLAG received, so it stays waiting for an A
+          else if (ua_frame_receptor[0] == FLAG)
+          {
+            ua_frame[0] = FLAG;
+            z = 1;
+            break;
+          }
+          //something else received, so it goes back to start
           else
           {
+            z = 0;
             memset(ua_frame, 0, sizeof(ua_frame));
             break;
           }
         }
-        //checking C value else if (z == 2)
+        //checking C value
         else if (z == 2)
         {
+          //C received, save and move on
           if (ua_frame_receptor[0] == CUA)
           {
             ua_frame[z++] = ua_frame_receptor[0];
           }
+          //FLAG received, so go back to waiting for an A
+          else if (ua_frame_receptor[0] == FLAG)
+          {
+            ua_frame[0] = FLAG;
+            z = 1;
+            break;
+          }
+          //something else received, so it goes back to start
           else
           {
+            z = 0;
             memset(ua_frame, 0, sizeof(ua_frame));
             break;
           }
@@ -191,12 +227,22 @@ int main(int argc, char **argv)
         //checking BCC value
         else
         {
+          //BCC rceived, save and move on
           if (ua_frame_receptor[0] == (BEMISS_UA))
           {
             ua_frame[z++] = ua_frame_receptor[0];
           }
+          //FLAG received, so go back to waiting for an A
+          else if (ua_frame_receptor[0] == FLAG)
+          {
+            ua_frame[0] = FLAG;
+            z = 1;
+            break;
+          }
+          //something else received, so it goes back to start
           else
           {
+            z = 0;
             memset(ua_frame, 0, sizeof(ua_frame));
             break;
           }
@@ -209,6 +255,7 @@ int main(int argc, char **argv)
       printf("Connection has been established..\n");
       break;
     }
+    count++;
   }
 
   if (tcsetattr(SET_FRAME_PORT, TCSANOW, &oldtio) == -1)
