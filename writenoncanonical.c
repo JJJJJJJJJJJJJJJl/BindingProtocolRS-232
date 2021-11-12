@@ -60,7 +60,7 @@ int main(int argc, char **argv)
   int SET_FRAME_PORT = open(SET_FRAME.port, O_RDWR | O_NOCTTY);
   if (SET_FRAME_PORT < 0)
   {
-    perror(argv[1]);
+    perror(SET_FRAME.port);
     exit(-1);
   }
 
@@ -78,8 +78,9 @@ int main(int argc, char **argv)
   /* set input mode (non-canonical, no echo,...) */
   newtio.c_lflag = 0;
 
-  newtio.c_cc[VTIME] = 1; /* inter-character timer unused */
+  newtio.c_cc[VTIME] = 0; /* inter-character timer unused */
   newtio.c_cc[VMIN] = 0;  /* blocking read until 5 chars received */
+  fcntl(SET_FRAME_PORT, F_SETFL, FNDELAY);
 
   /* 
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
@@ -103,7 +104,10 @@ int main(int argc, char **argv)
   {
     //SEND SET FRAME
     write(SET_FRAME_PORT, SET_FRAME.frame, 5);
-
+    //for some reason the port buffer is filled with bs after writting
+    //this wasnt happening before adding the "fcntl(SET_FRAME_PORT, F_SETFL, FNDELAY)" function
+    //so this print is for cleaning the buffer purposes
+    fprintf(stderr, "Cleaning port buffer..\n");
     //STATE MACHINE - READING UA_FRAME
     int ua_frame_bytes;
     while (z != 5)
@@ -122,7 +126,6 @@ int main(int argc, char **argv)
           read(SET_FRAME_PORT, ua_frame_receptor, 1);
         }
       }
-
       ua_frame_bytes = read(SET_FRAME_PORT, ua_frame_receptor, 1);
       if (ua_frame_bytes > 0)
       {
@@ -216,6 +219,10 @@ int main(int argc, char **argv)
           }
         }
       }
+      else
+      {
+        z++;
+      }
     }
 
     if (ua_frame_received)
@@ -238,6 +245,7 @@ int main(int argc, char **argv)
   {
   }
 
+  sleep(1);
   if (tcsetattr(SET_FRAME_PORT, TCSANOW, &oldtio) == -1)
   {
     perror("tcsetattr");
