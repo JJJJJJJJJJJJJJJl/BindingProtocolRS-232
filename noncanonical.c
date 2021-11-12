@@ -114,8 +114,8 @@ int main(int argc, char **argv)
 
       //if SET_FRAME has been resent first it needs to read whats already correct
       //essetially skipping buffer data to correct position
-      //eg.:Last time it was processing UA_FRAME C had an error, so FLAG + A are correct,
-      //but new UA_FRAME has been sent so we skip FLAG + A on the new buffer
+      //eg.:Last time it was processing SET_FRAME C had an error, so FLAG + A are correct,
+      //but new SET_FRAME has been sent so we skip FLAG + A on the new buffer
       if (count != 0)
       {
         for (int j = 0; j < z; j++)
