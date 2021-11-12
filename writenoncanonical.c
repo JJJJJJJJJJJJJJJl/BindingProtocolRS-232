@@ -44,28 +44,6 @@ typedef struct
   char frame[MAX_SIZE];          //Trama
 } linkLayer;
 
-volatile int STOP = FALSE;
-
-int hex_to_int(int decimalnum)
-{
-  int quotient, remainder;
-  int j = 0;
-  char hexadecimalnum[100];
-
-  quotient = decimalnum;
-
-  while (quotient != 0)
-  {
-    remainder = quotient % 16;
-    if (remainder < 10)
-      hexadecimalnum[j++] = 48 + remainder;
-    else
-      hexadecimalnum[j++] = 55 + remainder;
-    quotient = quotient / 16;
-  }
-  printf("AAA: %d\n", atoi(hexadecimalnum));
-  return atoi(hexadecimalnum);
-}
 int count = 0;
 void pickup() // atende alarme
 {
@@ -116,9 +94,8 @@ int main(int argc, char **argv)
     exit(-1);
   }
 
-  int z = 0;
-  char ua_frame_receptor[1];
-  char ua_frame[5];
+  int z = 0, connection = 0, ua_frame_received = 0;
+  char ua_frame_receptor[1], ua_frame[5];
 
   (void)signal(SIGALRM, pickup);
   //ESTABLISHING CONNECTION
@@ -128,7 +105,7 @@ int main(int argc, char **argv)
     write(SET_FRAME_PORT, SET_FRAME.frame, 5);
 
     //STATE MACHINE - READING UA_FRAME
-    int ua_frame_received;
+    int ua_frame_bytes;
     while (z != 5)
     {
 
@@ -146,8 +123,8 @@ int main(int argc, char **argv)
         }
       }
 
-      ua_frame_received = read(SET_FRAME_PORT, ua_frame_receptor, 1);
-      if (ua_frame_received > 0)
+      ua_frame_bytes = read(SET_FRAME_PORT, ua_frame_receptor, 1);
+      if (ua_frame_bytes > 0)
       {
         //checking flag values
         if (z == 0 || z == 4)
@@ -155,6 +132,10 @@ int main(int argc, char **argv)
           //FLAG received,save and move on
           if (ua_frame_receptor[0] == FLAG)
           {
+            if (z == 4)
+            {
+              ua_frame_received = 1;
+            }
             ua_frame[z++] = ua_frame_receptor[0];
           }
           //something else received, so it goes back to start
@@ -236,13 +217,25 @@ int main(int argc, char **argv)
         }
       }
     }
-    if (ua_frame[0] == FLAG && ua_frame[1] == AEMISS && ua_frame[2] == CUA && ua_frame[3] == (BEMISS_UA) && ua_frame[4] == FLAG)
+
+    if (ua_frame_received)
     {
+      connection = 1;
       printf("UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d | FLAG: %d\n", ua_frame[0], ua_frame[1], ua_frame[2], ua_frame[3], ua_frame[4]);
       printf("Connection has been established..\n");
       break;
     }
     count++;
+  }
+
+  //connection was not made
+  if (connection == 0)
+  {
+    printf("Connection lost..\n");
+  }
+  //start data transmission
+  else
+  {
   }
 
   if (tcsetattr(SET_FRAME_PORT, TCSANOW, &oldtio) == -1)
