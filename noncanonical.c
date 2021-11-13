@@ -46,11 +46,6 @@ typedef struct
 } linkLayer;
 
 int count = 0;
-void pickup() // atende alarme
-{
-  printf("alarm #%d\n", count);
-  count++;
-}
 
 int main(int argc, char **argv)
 {
@@ -106,7 +101,6 @@ int main(int argc, char **argv)
   int z = 0, connection = 0, set_frame_received = 0;
   char set_frame_receptor[1], set_frame[5];
 
-  (void)signal(SIGALRM, pickup);
   //ESTABLISHING CONNECTION
   while (count < 3)
   {
@@ -114,8 +108,6 @@ int main(int argc, char **argv)
     int set_frame_bytes, poll_res;
     while (z != 5)
     {
-
-      //alarm(UA_FRAME.timeout);
 
       //poll blocks execution for UA_FRAME.timeout * 1000 seconds unless:
       // - a file descriptor becomes ready
