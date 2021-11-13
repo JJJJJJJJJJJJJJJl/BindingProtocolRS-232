@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <sys/poll.h>
 
 #define BAUDRATE B38400
 #define MODEMDEVICE "/dev/ttyS1"
@@ -56,6 +57,7 @@ int main(int argc, char **argv)
   linkLayer SET_FRAME = {"/dev/ttyS10", 0, 1, 3, 3, {FLAG, AEMISS, CSET, BEMISS_SET, FLAG}};
 
   struct termios oldtio, newtio;
+  struct pollfd pfds[1];
 
   int SET_FRAME_PORT = open(SET_FRAME.port, O_RDWR | O_NOCTTY);
   if (SET_FRAME_PORT < 0)
@@ -64,11 +66,17 @@ int main(int argc, char **argv)
     exit(-1);
   }
 
+  /* pfds[0].fd = 0;
+  pfds[0].events = POLLIN; */
+
   if (tcgetattr(SET_FRAME_PORT, &oldtio) == -1)
   { /* save current port settings */
     perror("tcgetattr");
     exit(-1);
   }
+
+  pfds[0].fd = SET_FRAME_PORT;
+  pfds[0].events = POLLIN;
 
   bzero(&newtio, sizeof(newtio));
   newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
@@ -80,7 +88,7 @@ int main(int argc, char **argv)
 
   newtio.c_cc[VTIME] = 0; /* inter-character timer unused */
   newtio.c_cc[VMIN] = 0;  /* blocking read until 5 chars received */
-  fcntl(SET_FRAME_PORT, F_SETFL, FNDELAY);
+  //fcntl(SET_FRAME_PORT, F_SETFL, FNDELAY);
 
   /* 
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
@@ -103,125 +111,148 @@ int main(int argc, char **argv)
   while (count < 3)
   {
     //SEND SET FRAME
-    write(SET_FRAME_PORT, SET_FRAME.frame, 5);
-    //for some reason the port buffer is filled with bs after writting
-    //this wasnt happening before adding the "fcntl(SET_FRAME_PORT, F_SETFL, FNDELAY)" function
-    //so this print is for cleaning the buffer purposes
-    fprintf(stderr, "Cleaning port buffer..\n");
+    int bytes = write(SET_FRAME_PORT, SET_FRAME.frame, 5);
+    //making sure frame is sent
+    while (bytes == 0)
+    {
+      bytes = write(SET_FRAME_PORT, SET_FRAME.frame, 5);
+    }
+
     //STATE MACHINE - READING UA_FRAME
-    int ua_frame_bytes;
+    int ua_frame_bytes, poll_res;
     while (z != 5)
     {
 
-      alarm(SET_FRAME.timeout);
+      //alarm(SET_FRAME.timeout);
 
-      //if UA_FRAME has been resent first it needs to read whats already correct
-      //essetially skipping buffer data to correct position
-      //eg.:Last time it was processing UA_FRAME C had an error, so FLAG + A are correct,
-      //but new UA_FRAME has been sent so we skip FLAG + A on the new buffer
-      if (count != 0)
+      //poll blocks execution for SET_FRAME.timeout * 1000 seconds unless:
+      // - a file descriptor becomes ready
+      // - the call is interrupted by a signal handler
+      // - the timeout expires
+      poll_res = poll(pfds, 1, SET_FRAME.timeout * 1000);
+      if (poll_res < 0)
       {
-        for (int j = 0; j < z; j++)
-        {
-          read(SET_FRAME_PORT, ua_frame_receptor, 1);
-        }
+        perror("poll() failed\n");
+        break;
       }
-      ua_frame_bytes = read(SET_FRAME_PORT, ua_frame_receptor, 1);
-      if (ua_frame_bytes > 0)
+      else if (poll_res == 0)
       {
-        //checking flag values
-        if (z == 0 || z == 4)
-        {
-          //FLAG received,save and move on
-          if (ua_frame_receptor[0] == FLAG)
-          {
-            if (z == 4)
-            {
-              ua_frame_received = 1;
-            }
-            ua_frame[z++] = ua_frame_receptor[0];
-          }
-          //something else received, so it goes back to start
-          else
-          {
-            z = 0;
-            memset(ua_frame, 0, sizeof(ua_frame));
-            break;
-          }
-        }
-        //checking A value
-        else if (z == 1)
-        {
-          //A received, save and move on
-          if (ua_frame_receptor[0] == AEMISS)
-          {
-            ua_frame[z++] = ua_frame_receptor[0];
-          }
-          //FLAG received, so it stays waiting for an A
-          else if (ua_frame_receptor[0] == FLAG)
-          {
-            ua_frame[0] = FLAG;
-            z = 1;
-            break;
-          }
-          //something else received, so it goes back to start
-          else
-          {
-            z = 0;
-            memset(ua_frame, 0, sizeof(ua_frame));
-            break;
-          }
-        }
-        //checking C value
-        else if (z == 2)
-        {
-          //C received, save and move on
-          if (ua_frame_receptor[0] == CUA)
-          {
-            ua_frame[z++] = ua_frame_receptor[0];
-          }
-          //FLAG received, so go back to waiting for an A
-          else if (ua_frame_receptor[0] == FLAG)
-          {
-            ua_frame[0] = FLAG;
-            z = 1;
-            break;
-          }
-          //something else received, so it goes back to start
-          else
-          {
-            z = 0;
-            memset(ua_frame, 0, sizeof(ua_frame));
-            break;
-          }
-        }
-        //checking BCC value
-        else
-        {
-          //BCC rceived, save and move on
-          if (ua_frame_receptor[0] == (BEMISS_UA))
-          {
-            ua_frame[z++] = ua_frame_receptor[0];
-          }
-          //FLAG received, so go back to waiting for an A
-          else if (ua_frame_receptor[0] == FLAG)
-          {
-            ua_frame[0] = FLAG;
-            z = 1;
-            break;
-          }
-          //something else received, so it goes back to start
-          else
-          {
-            z = 0;
-            memset(ua_frame, 0, sizeof(ua_frame));
-            break;
-          }
-        }
+        fprintf(stderr, "Port had no data to be read.\n");
+        break;
       }
       else
       {
-        z++;
+        if (pfds[0].revents && POLLIN)
+        {
+          //if UA_FRAME has been resent first it needs to read whats already correct
+          //essetially skipping buffer data to correct position
+          //eg.:Last time it was processing UA_FRAME C had an error, so FLAG + A are correct,
+          //but new UA_FRAME has been sent so we skip FLAG + A on the new buffer
+          if (count != 0)
+          {
+            for (int j = 0; j < z; j++)
+            {
+              read(SET_FRAME_PORT, ua_frame_receptor, 1);
+            }
+          }
+          ua_frame_bytes = read(SET_FRAME_PORT, ua_frame_receptor, 1);
+          if (ua_frame_bytes > 0)
+          {
+            //checking flag values
+            if (z == 0 || z == 4)
+            {
+              //FLAG received,save and move on
+              if (ua_frame_receptor[0] == FLAG)
+              {
+                if (z == 4)
+                {
+                  ua_frame_received = 1;
+                }
+                ua_frame[z++] = ua_frame_receptor[0];
+              }
+              //something else received, so it goes back to start
+              else
+              {
+                z = 0;
+                memset(ua_frame, 0, sizeof(ua_frame));
+                break;
+              }
+            }
+            //checking A value
+            else if (z == 1)
+            {
+              //A received, save and move on
+              if (ua_frame_receptor[0] == AEMISS)
+              {
+                ua_frame[z++] = ua_frame_receptor[0];
+              }
+              //FLAG received, so it stays waiting for an A
+              else if (ua_frame_receptor[0] == FLAG)
+              {
+                ua_frame[0] = FLAG;
+                z = 1;
+                break;
+              }
+              //something else received, so it goes back to start
+              else
+              {
+                z = 0;
+                memset(ua_frame, 0, sizeof(ua_frame));
+                break;
+              }
+            }
+            //checking C value
+            else if (z == 2)
+            {
+              //C received, save and move on
+              if (ua_frame_receptor[0] == CUA)
+              {
+                ua_frame[z++] = ua_frame_receptor[0];
+              }
+              //FLAG received, so go back to waiting for an A
+              else if (ua_frame_receptor[0] == FLAG)
+              {
+                ua_frame[0] = FLAG;
+                z = 1;
+                break;
+              }
+              //something else received, so it goes back to start
+              else
+              {
+                z = 0;
+                memset(ua_frame, 0, sizeof(ua_frame));
+                break;
+              }
+            }
+            //checking BCC value
+            else
+            {
+              //BCC rceived, save and move on
+              if (ua_frame_receptor[0] == (BEMISS_UA))
+              {
+                ua_frame[z++] = ua_frame_receptor[0];
+              }
+              //FLAG received, so go back to waiting for an A
+              else if (ua_frame_receptor[0] == FLAG)
+              {
+                ua_frame[0] = FLAG;
+                z = 1;
+                break;
+              }
+              //something else received, so it goes back to start
+              else
+              {
+                z = 0;
+                memset(ua_frame, 0, sizeof(ua_frame));
+                break;
+              }
+            }
+          }
+          else
+          {
+            z++;
+          }
+        }
       }
     }
 
@@ -229,8 +260,15 @@ int main(int argc, char **argv)
     {
       connection = 1;
       printf("UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d | FLAG: %d\n", ua_frame[0], ua_frame[1], ua_frame[2], ua_frame[3], ua_frame[4]);
-      printf("Connection has been established..\n");
+      printf("Connection (FROM ISSUER PERSPECTIVE) has been established..\n");
       break;
+    }
+    else
+    {
+      if (poll_res != 0)
+      {
+        fprintf(stderr, "Frame had errors.\n");
+      }
     }
     count++;
   }
