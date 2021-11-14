@@ -85,7 +85,6 @@ int main(int argc, char **argv)
 
   newtio.c_cc[VTIME] = 0; /* inter-character timer unused */
   newtio.c_cc[VMIN] = 0;  /* blocking read until 5 chars received */
-  //fcntl(SET_FRAME_PORT, F_SETFL, FNDELAY);
 
   /* 
     VTIME e VMIN devem ser alterados de forma a proteger com um temporizador a 
