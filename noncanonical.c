@@ -45,7 +45,12 @@ typedef struct
   char frame[MAX_SIZE];          //Trama
 } linkLayer;
 
-int count = 0;
+int count = 0, flag;
+void pickup() // atende alarme
+{
+  flag = 1;
+  count++;
+}
 
 int main(int argc, char **argv)
 {
@@ -101,19 +106,29 @@ int main(int argc, char **argv)
   int z = 0, connection = 0, set_frame_received = 0;
   char set_frame_receptor[1], set_frame[5];
 
+  (void)signal(SIGALRM, pickup);
   //ESTABLISHING CONNECTION
   while (count < 3)
   {
+
+    flag = 0;
+    alarm(UA_FRAME.timeout);
+
     //STATE MACHINE - READING SET_FRAME
     int set_frame_bytes, poll_res;
     while (z != 5)
     {
 
+      if (flag)
+      {
+        fprintf(stderr, "Alarm went off\n");
+        break;
+      }
       //poll blocks execution for UA_FRAME.timeout * 1000 seconds unless:
       // - a file descriptor becomes ready
       // - the call is interrupted by a signal handler
       // - the timeout expires
-      poll_res = poll(pfds, 1, UA_FRAME.timeout * 1000);
+      poll_res = poll(pfds, 1, 1000);
       if (poll_res < 0)
       {
         perror("poll() failed\n");
@@ -128,19 +143,6 @@ int main(int argc, char **argv)
       {
         if (pfds[0].revents && POLLIN)
         {
-
-          //if SET_FRAME has been resent first it needs to read whats already correct
-          //essetially skipping buffer data to correct position
-          //eg.:Last time it was processing SET_FRAME C had an error, so FLAG + A are correct,
-          //but new SET_FRAME has been sent so we skip FLAG + A on the new buffer
-          if (count != 0)
-          {
-            for (int j = 0; j < z; j++)
-            {
-              read(UA_FRAME_PORT, set_frame_receptor, 1);
-            }
-          }
-
           set_frame_bytes = read(UA_FRAME_PORT, set_frame_receptor, 1);
           if (set_frame_bytes > 0)
           {
@@ -264,6 +266,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "Frame had errors.\n");
       }
     }
+    tcflush(UA_FRAME_PORT, TCIOFLUSH);
     count++;
   }
 
