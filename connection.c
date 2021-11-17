@@ -17,8 +17,12 @@ void pickup() // atende alarme
     count++;
 }
 
+//establishing connection frames
 linkLayer SET_FRAME = {"/dev/ttyS10", 0, 1, 3, 3, {FLAG, AEMISS, CSET, BEMISS_SET, FLAG}};
 linkLayer UA_FRAME = {"/dev/ttyS11", 0, 1, 3, 3, {FLAG, AEMISS, CUA, BEMISS_UA, FLAG}};
+
+//information frames
+char DATA_FRAME[7] = {FLAG, AEMISS, CSET, BEMISS_SET, -1, BCCI, FLAG};
 
 struct termios oldtio, newtio;
 struct pollfd pfds[1];
@@ -442,4 +446,8 @@ int llopen(char *port, int agent)
     }
 
     return PORT;
+}
+
+int llwrite(int fd, char *buffer, int length)
+{
 }

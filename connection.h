@@ -16,6 +16,7 @@
 #define BRECEPT_SET ARECEPT ^ CSET
 #define BEMISS_UA AEMISS ^ CUA
 #define BERECEPT_UA ARECEPT ^ CUA
+#define BCCI 0x02
 
 #define MAX_SIZE 255
 
@@ -36,5 +37,6 @@ typedef struct
 } linkLayer;
 
 int llopen(char *port, int agent);
+int llwrite(int fd, char *buffer, int length);
 
 #endif
