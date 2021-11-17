@@ -6,21 +6,24 @@ int main(int argc, char** argv){
 
     FILE* fo;
 
+    //Open file and handle error
     if((fo = fopen(argv[1], "r")) == NULL){
         exit(1);
-        printf("Erro ao ler ficheiro\n");
+        printf("Error opening file\n");
     }
-    else printf("Fichero lido\n");
+    else printf("File opened\n");
 
     char * line = NULL;
     size_t len = 0;
     ssize_t read;
     
+    //Read file
     while ((read = getline(&line, &len, fo)) != -1) {
-        printf("Retrieved line of length %zu:\n", read);
-        printf("%s\n", line);
+        printf("Line length %zu\n", read);
+        printf("0x%x\n", line[0]);
     }
 
+    //Close file
     fclose(fo);
     if (line) free(line);
     exit(EXIT_SUCCESS);
