@@ -1,6 +1,7 @@
 canonical
 canonical.c
 noncanonical
+noncanonical.c
 writenoncanonical
 writecanonical.c
 writecanonical

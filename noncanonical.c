@@ -52,6 +52,10 @@ void pickup() // atende alarme
   count++;
 }
 
+linkLayer UA_FRAME = {"/dev/ttyS11", 0, 1, 3, 3, {FLAG, AEMISS, CUA, BEMISS_UA, FLAG}};
+struct termios oldtio, newtio;
+struct pollfd pfds[1];
+
 int main(int argc, char **argv)
 {
   linkLayer UA_FRAME = {"/dev/ttyS11", 0, 1, 3, 3, {FLAG, AEMISS, CUA, BEMISS_UA, FLAG}};
@@ -108,7 +112,7 @@ int main(int argc, char **argv)
 
   (void)signal(SIGALRM, pickup);
   //ESTABLISHING CONNECTION
-  while (count < 3)
+  while (connection != 1)
   {
 
     flag = 0;
@@ -124,11 +128,11 @@ int main(int argc, char **argv)
         fprintf(stderr, "Alarm went off\n");
         break;
       }
-      //poll blocks execution for UA_FRAME.timeout * 1000 seconds unless:
+      //poll blocks execution for 1000 seconds unless:
       // - a file descriptor becomes ready
       // - the call is interrupted by a signal handler
       // - the timeout expires
-      poll_res = poll(pfds, 1, 1000);
+      poll_res = poll(pfds, 1, UA_FRAME.timeout * 1000);
       if (poll_res < 0)
       {
         perror("poll() failed\n");
@@ -257,7 +261,7 @@ int main(int argc, char **argv)
       }
       fprintf(stderr, "UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d | FLAG: %d\n", set_frame[0], set_frame[1], set_frame[2], set_frame[3], set_frame[4]);
       fprintf(stderr, "Connection (FROM RECEIVER PERSPECTIVE) has been established..\n");
-      break;
+      //break;
     }
     else
     {
