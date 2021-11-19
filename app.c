@@ -11,24 +11,7 @@
 #include <signal.h>
 #include <sys/poll.h>
 #include <limits.h>
-#include "connection.h"
-
-char *int2bin(int i)
-{
-  size_t bits = sizeof(int) * CHAR_BIT;
-
-  char *str = malloc(bits + 1);
-  if (!str)
-    return NULL;
-  str[bits] = 0;
-
-  // type punning because signed shift is implementation-defined
-  unsigned u = *(unsigned *)&i;
-  for (; bits--; u >>= 1)
-    str[bits] = u & 1 ? '1' : '0';
-
-  return str;
-}
+#include "api.h"
 
 int main(int argc, char **argv)
 {
@@ -79,17 +62,37 @@ int main(int argc, char **argv)
       //Read file
       while ((read = getline(&line, &len, fo)) != -1)
       {
+        int llwrite_result = -1;
         char *binary_string;
         for (int i = 0; i < strlen(line); i++)
         {
-          binary_string = int2bin(line[i]);
-          printf("%s\n", binary_string);
+          llwrite(PORT, line[i]);
+          //printf("INT: %d\n", line[i]);
+          //binary_string = int2bin(line[i]);
+          //printf("%s\n", binary_string);
+          /* while (llwrite_result < 0)
+          {
+            llwrite_result = llwrite(PORT, binary_string, strlen(binary_string));
+          } */
         }
-        //llwrite(PORT, line, read)
       }
 
       //Close file
       fclose(fo);
+    }
+    //receptor
+    else if (agent == 2)
+    {
+      printf("Ready to start gettin the file..\n");
+      char ok[32];
+      int a = llread(PORT, ok);
+      //printf("a: %d\n", a);
+      while (a > 0)
+      {
+        //printf("bin: %s\n", ok);
+        memset(ok, 0, sizeof(ok));
+        a = llread(PORT, ok);
+      }
     }
 
     //llwrite();

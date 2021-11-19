@@ -8,7 +8,9 @@
 #include <string.h>
 #include <signal.h>
 #include <sys/poll.h>
-#include "connection.h"
+#include <limits.h>
+#include "api.h"
+#include "protocol.h"
 
 int count = 0, flag;
 void pickup() // atende alarme
@@ -17,12 +19,33 @@ void pickup() // atende alarme
     count++;
 }
 
+char *int2bin(int i)
+{
+    size_t bits = sizeof(int) * CHAR_BIT;
+
+    char *str = malloc(bits + 1);
+    if (!str)
+        return NULL;
+    str[bits] = 0;
+
+    // type punning because signed shift is implementation-defined
+    unsigned u = *(unsigned *)&i;
+    for (; bits--; u >>= 1)
+        str[bits] = u & 1 ? '1' : '0';
+
+    return str;
+}
+
 //establishing connection frames
-linkLayer SET_FRAME = {"/dev/ttyS10", 0, 1, 3, 3, {FLAG, AEMISS, CSET, BEMISS_SET, FLAG}};
-linkLayer UA_FRAME = {"/dev/ttyS11", 0, 1, 3, 3, {FLAG, AEMISS, CUA, BEMISS_UA, FLAG}};
+linkLayer SET_FRAME = {"/dev/ttyS10", 0, 1, 3, 3, {FLAG, A, CSET, BCCSET, FLAG}};
+linkLayer UA_FRAME = {"/dev/ttyS11", 0, 1, 3, 3, {FLAG, A, CUA, BCCUA, FLAG}};
 
 //information frames
-char DATA_FRAME[7] = {FLAG, AEMISS, CSET, BEMISS_SET, -1, BCCI, FLAG};
+char DATA_FRAME[7] = {FLAG, A, CSET, BCCSET, -1, BCCI, FLAG};
+
+//verifying information frames
+char RR[5] = {FLAG, A, CRR, BCCRR, FLAG};
+char REJ[5] = {FLAG, A, CREJ, BCCREJ, FLAG};
 
 struct termios oldtio, newtio;
 struct pollfd pfds[1];
@@ -144,7 +167,7 @@ int llopen(char *port, int agent)
                             else if (z == 1)
                             {
                                 //A received, save and move on
-                                if (ua_frame_receptor[0] == AEMISS)
+                                if (ua_frame_receptor[0] == A)
                                 {
                                     ua_frame[z++] = ua_frame_receptor[0];
                                 }
@@ -190,7 +213,7 @@ int llopen(char *port, int agent)
                             else
                             {
                                 //BCC rceived, save and move on
-                                if (ua_frame_receptor[0] == (BEMISS_UA))
+                                if (ua_frame_receptor[0] == (BCCUA))
                                 {
                                     ua_frame[z++] = ua_frame_receptor[0];
                                 }
@@ -223,7 +246,7 @@ int llopen(char *port, int agent)
                 connection = 1;
                 printf("UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d | FLAG: %d\n", ua_frame[0], ua_frame[1], ua_frame[2], ua_frame[3], ua_frame[4]);
                 printf("Connection (FROM ISSUER PERSPECTIVE) has been established..\n");
-                break;
+                return PORT;
             }
             else
             {
@@ -340,7 +363,7 @@ int llopen(char *port, int agent)
                             else if (z == 1)
                             {
                                 //A received, save and move on
-                                if (set_frame_receptor[0] == AEMISS)
+                                if (set_frame_receptor[0] == A)
                                 {
                                     set_frame[z++] = set_frame_receptor[0];
                                 }
@@ -386,7 +409,7 @@ int llopen(char *port, int agent)
                             else
                             {
                                 //BCC rceived, save and move on
-                                if (set_frame_receptor[0] == (BEMISS_SET))
+                                if (set_frame_receptor[0] == (BCCSET))
                                 {
                                     set_frame[z++] = set_frame_receptor[0];
                                 }
@@ -427,7 +450,7 @@ int llopen(char *port, int agent)
                 }
                 fprintf(stderr, "UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d | FLAG: %d\n", set_frame[0], set_frame[1], set_frame[2], set_frame[3], set_frame[4]);
                 fprintf(stderr, "Connection (FROM RECEIVER PERSPECTIVE) has been established..\n");
-                //break;
+                return PORT;
             }
             else
             {
@@ -440,14 +463,61 @@ int llopen(char *port, int agent)
             count++;
         }
     }
-    else
-    {
-        perror("Invalid agent.\n");
-    }
-
-    return PORT;
+    perror("Invalid agent.\n");
+    return -1;
 }
 
-int llwrite(int fd, char *buffer, int length)
+int x1 = 0;
+int llwrite(int fd, int bytes)
 {
+    DATA_FRAME[4] = bytes;
+    int write_bytes;
+    //send I frame
+    printf("i: %d -> sent i_frame[4]: %d\n", x1, DATA_FRAME[4]);
+    write_bytes = write(fd, DATA_FRAME, 7);
+    x1++;
+
+    char response[5];
+    //receive RR or REJ
+    read(fd, response, 5);
+    printf("response[2]: %d\n", response[2]);
+
+    //frame was rejected
+    if (response[2] == CREJ)
+    {
+        return -1;
+    }
+
+    return write_bytes;
+}
+
+int x2 = 0;
+int llread(int fd, char *buffer)
+{
+    int read_bytes;
+    char i_frame[7];
+    //read I frame
+    read_bytes = read(fd, i_frame, 7);
+    printf("i: %d -> received i_frame[4]: %d\n", x2, i_frame[4]);
+    strcpy(buffer, int2bin(i_frame[4]));
+    x2++;
+
+    //verify data frame
+    int bytes = buffer[4];
+    int data_bcc = buffer[5];
+
+    int valid = 1;
+    //check wtv parity stuff..
+
+    //send response back
+    //i frame had error or duplicate wtv
+    if (valid != 1)
+    {
+        write(fd, REJ, 5);
+        return -1;
+    }
+
+    //valid i frame
+    write(fd, RR, 5);
+    return read_bytes;
 }

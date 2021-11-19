@@ -1,21 +1,15 @@
-#ifndef PDD_LIST_H_INCLUDED
-#define PDD_LIST_H_INCLUDED
-
 #define BAUDRATE B38400
-#define MODEMDEVICE "/dev/ttyS1"
-#define _POSIX_SOURCE 1 /* POSIX compliant source */
-#define FALSE 0
-#define TRUE 1
 
 #define FLAG 0x7e
-#define AEMISS 0x03
-#define ARECEPT 0x01
+#define A 0x03
 #define CSET 0x03
 #define CUA 0x07
-#define BEMISS_SET AEMISS ^ CSET
-#define BRECEPT_SET ARECEPT ^ CSET
-#define BEMISS_UA AEMISS ^ CUA
-#define BERECEPT_UA ARECEPT ^ CUA
+#define CRR 0X05
+#define CREJ 0x01
+#define BCCSET A ^ CSET
+#define BCCUA A ^ CUA
+#define BCCRR A ^ CRR
+#define BCCREJ A ^ CREJ
 #define BCCI 0x02
 
 #define MAX_SIZE 255
@@ -35,8 +29,3 @@ typedef struct
     unsigned int numTransmissions; //Número de tentativas em caso de falha
     char frame[MAX_SIZE];          //Trama
 } linkLayer;
-
-int llopen(char *port, int agent);
-int llwrite(int fd, char *buffer, int length);
-
-#endif

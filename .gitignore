@@ -1,9 +1,4 @@
-canonical
-canonical.c
-noncanonical
-noncanonical.c
-writenoncanonical
-writecanonical.c
-writecanonical
-alarme
-alarme.c
+app
+api.o
+output.txt
+output2.txt
