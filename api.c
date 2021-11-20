@@ -467,20 +467,17 @@ int llopen(char *port, int agent)
     return -1;
 }
 
-int x1 = 0;
-int llwrite(int fd, int bytes)
+int llwrite(int fd, char bytes)
 {
     DATA_FRAME[4] = bytes;
     int write_bytes;
+
     //send I frame
-    printf("i: %d -> sent i_frame[4]: %d\n", x1, DATA_FRAME[4]);
     write_bytes = write(fd, DATA_FRAME, 7);
-    x1++;
 
     char response[5];
     //receive RR or REJ
     read(fd, response, 5);
-    printf("response[2]: %d\n", response[2]);
 
     //frame was rejected
     if (response[2] == CREJ)
@@ -491,20 +488,24 @@ int llwrite(int fd, int bytes)
     return write_bytes;
 }
 
-int x2 = 0;
-int llread(int fd, char *buffer)
+char llread(int fd, char *buffer)
 {
     int read_bytes;
     char i_frame[7];
     //read I frame
-    read_bytes = read(fd, i_frame, 7);
-    printf("i: %d -> received i_frame[4]: %d\n", x2, i_frame[4]);
-    strcpy(buffer, int2bin(i_frame[4]));
-    x2++;
+    int poll_res = poll(pfds, 1, 1000);
+    if (poll_res < 1)
+    {
+        return 0;
+    }
+    else if (pfds[0].revents && POLLIN)
+    {
+        read_bytes = read(fd, i_frame, 7);
+    }
+    tcflush(fd, TCIOFLUSH);
+    buffer[0] = i_frame[4];
 
     //verify data frame
-    int bytes = buffer[4];
-    int data_bcc = buffer[5];
 
     int valid = 1;
     //check wtv parity stuff..

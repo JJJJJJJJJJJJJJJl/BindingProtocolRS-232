@@ -40,14 +40,18 @@ int main(int argc, char **argv)
   //data transmission
   else
   {
+    int i = 0;
+    char DATA[15000];
+    FILE *new_file;
+
     //issuer
     if (agent == 1)
     {
       //open file
-      FILE *fo;
+      FILE *file;
 
       //Open file and handle error
-      if ((fo = fopen("pinguim.gif", "r")) == NULL)
+      if ((file = fopen("pinguim.gif", "rb")) == NULL)
       {
         exit(1);
         printf("Error opening file\n");
@@ -55,47 +59,44 @@ int main(int argc, char **argv)
       else
         printf("File opened\n");
 
-      char *line = NULL;
+      char line[1];
       size_t len = 0;
       ssize_t read;
 
       //Read file
-      while ((read = getline(&line, &len, fo)) != -1)
+      while (fread(line, sizeof(line), 1, file) > 0)
       {
         int llwrite_result = -1;
         char *binary_string;
-        for (int i = 0; i < strlen(line); i++)
-        {
-          llwrite(PORT, line[i]);
-          //printf("INT: %d\n", line[i]);
-          //binary_string = int2bin(line[i]);
-          //printf("%s\n", binary_string);
-          /* while (llwrite_result < 0)
-          {
-            llwrite_result = llwrite(PORT, binary_string, strlen(binary_string));
-          } */
-        }
+        printf("%d \n", line[0]);
+        llwrite(PORT, line[0]);
       }
 
       //Close file
-      fclose(fo);
+      fclose(file);
     }
     //receptor
     else if (agent == 2)
     {
+      new_file = fopen("received_file.gif", "wb");
+      if (new_file == NULL)
+      {
+        printf("Unable to create file.\n");
+        exit(EXIT_FAILURE);
+      }
+
       printf("Ready to start gettin the file..\n");
-      char ok[32];
+      char ok[1];
       int a = llread(PORT, ok);
-      //printf("a: %d\n", a);
       while (a > 0)
       {
-        //printf("bin: %s\n", ok);
-        memset(ok, 0, sizeof(ok));
+        DATA[i] = ok[0];
+        printf("%d\n", DATA[i]);
+        fputc(DATA[i++], new_file);
         a = llread(PORT, ok);
       }
+      fclose(new_file);
     }
-
-    //llwrite();
   }
 
   return 0;
