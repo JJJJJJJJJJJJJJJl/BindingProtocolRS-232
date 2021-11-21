@@ -102,8 +102,6 @@ int main(int argc, char **argv)
       while (fread(byte, sizeof(byte), 1, file) > 0)
       {
         DATA[cur_byte++] = byte[0];
-        //printf("%d \n", byte[0]);
-        //llwrite(PORT, byte[0]);
       }
 
       int cur_byte_send = 1, llwrite_result;
