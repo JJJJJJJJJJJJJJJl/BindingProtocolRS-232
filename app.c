@@ -65,6 +65,7 @@ int main(int argc, char **argv)
     int file_size_bytes;
     //array containing every byte of the file
     char DATA[MAX_FILE_SIZE];
+    int cur_byte = 1;
 
     //issuer
     if (agent == 1)
@@ -86,7 +87,7 @@ int main(int argc, char **argv)
       //number of bytes of file
       file_size_bytes = get_file_bytes(file);
 
-      if (file_size_bytes > MAX_FILE_SIZE)
+      if (file_size_bytes > MAX_FILE_SIZE - 1)
       {
         printf("File is too large\nFile size: %d - Maximum capacity: %d\n", file_size_bytes, MAX_FILE_SIZE);
         fclose(file);
@@ -97,11 +98,20 @@ int main(int argc, char **argv)
 
       char byte[1];
 
-      //read file
+      //process file
       while (fread(byte, sizeof(byte), 1, file) > 0)
       {
+        DATA[cur_byte++] = byte[0];
         //printf("%d \n", byte[0]);
-        llwrite(PORT, byte[0]);
+        //llwrite(PORT, byte[0]);
+      }
+
+      int cur_byte_send = 1, llwrite_result;
+      //send file
+      while (cur_byte_send != cur_byte)
+      {
+        llwrite_result = llwrite(PORT, DATA[cur_byte_send]);
+        llwrite_result > 0 ? cur_byte_send++ : cur_byte_send;
       }
 
       printf("File successfully sent\n");
@@ -117,15 +127,23 @@ int main(int argc, char **argv)
         exit(1);
       }
 
-      int cur_byte = 0;
       char received_byte[1];
+      int llread_result;
 
       printf("Ready to receive file\n");
-      while (llread(PORT, received_byte) > 0)
+      while ((llread_result = llread(PORT, received_byte)) > -2)
       {
-        DATA[cur_byte] = received_byte[0];
-        //printf("%d\n", DATA[cur_byte]);
-        fputc(DATA[cur_byte], new_file);
+        if (llread_result > 0)
+        {
+          DATA[cur_byte] = received_byte[0];
+          cur_byte++;
+        }
+      }
+
+      //writting bytes to file
+      for (int i = 1; i < cur_byte; i++)
+      {
+        fputc(DATA[i], new_file);
       }
 
       printf("File successfully received\n");

@@ -13,7 +13,7 @@
 #include "protocol.h"
 
 int count = 0, flag;
-void pickup() // atende alarme
+void pickup()
 {
     flag = 1;
     count++;
@@ -452,55 +452,83 @@ int llopen(char *port, int agent)
 int llwrite(int fd, char bytes)
 {
     DATA_FRAME[4] = bytes;
-    int write_bytes;
+    int write_bytes, read_bytes;
 
+    (void)signal(SIGALRM, pickup);
+    flag = 0;
+    alarm(2);
     //send I frame
     write_bytes = write(fd, DATA_FRAME, 7);
 
     char response[5];
     //receive RR or REJ
-    read(fd, response, 5);
-
-    //frame was rejected
-    if (response[2] == CREJ)
+    int poll_res = poll(pfds, 1, 2000);
+    if (poll_res < 1)
     {
         return -1;
     }
+    else if (pfds[0].revents && POLLIN)
+    {
+        read_bytes = read(fd, response, 5);
+    }
 
-    return write_bytes;
+    //validation
+    if (read_bytes == 5 && response[0] == FLAG && response[1] == A && response[4] == FLAG)
+    {
+        if (response[2] == CRR && response[3] == (BCCRR))
+        {
+            return write_bytes;
+        }
+        else if (response[2] == CREJ && response[3] == (BCCREJ))
+        {
+            printf("REJ: Frame was rejected");
+            return -1;
+        }
+        else
+        {
+            printf("RR/REJ frame had errors\n");
+            return -1;
+        }
+    }
+    else
+    {
+        printf("RR/REJ frame had errors\n");
+        return -1;
+    }
 }
 
 char llread(int fd, char *buffer)
 {
     int read_bytes;
     char i_frame[7];
+
     //read I frame
-    int poll_res = poll(pfds, 1, 1000);
+    int poll_res = poll(pfds, 1, 10000);
     if (poll_res < 1)
     {
-        return 0;
+        return -2;
     }
     else if (pfds[0].revents && POLLIN)
     {
         read_bytes = read(fd, i_frame, 7);
     }
+
     tcflush(fd, TCIOFLUSH);
-    buffer[0] = i_frame[4];
 
     //verify data frame
+    if (read_bytes == 7 && i_frame[0] == FLAG && i_frame[1] == A && i_frame[2] == CSET && i_frame[3] == (BCCSET))
+    {
 
-    int valid = 1;
-    //check wtv parity stuff..
+        //check wtv parity stuff..
+        //i_frame[4] and i_frame[5]
 
-    //send response back
-    //i frame had error or duplicate wtv
-    if (valid != 1)
+        buffer[0] = i_frame[4];
+        write(fd, RR, 5);
+        return read_bytes;
+    }
+    else
     {
         write(fd, REJ, 5);
         return -1;
     }
-
-    //valid i frame
-    write(fd, RR, 5);
-    return read_bytes;
 }
