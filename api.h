@@ -4,5 +4,6 @@
 int llopen(char *port, int agent);
 int llwrite(int fd, char bytes);
 char llread(int fd, char *buffer);
+int llclose(int fd, int agente);
 
 #endif

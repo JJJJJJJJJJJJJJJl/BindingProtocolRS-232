@@ -12,7 +12,7 @@
 #include "api.h"
 #include "protocol.h"
 
-int cur_transmission = 0, flag;
+int cur_transmission, flag;
 void pickup()
 {
     flag = 1;
@@ -29,6 +29,9 @@ linkLayer DATA_FRAME = {2, 3, {FLAG, A, CSET, BCCSET, -1, BCCI, FLAG}};
 //verifying information frames
 char RR[5] = {FLAG, A, CRR, BCCRR, FLAG};
 char REJ[5] = {FLAG, A, CREJ, BCCREJ, FLAG};
+
+//disconnect frame
+linkLayer DISC_FRAME = {3, 3, {FLAG, A, CDISC, BCCDISC, FLAG}};
 
 struct termios oldtio, newtio;
 struct pollfd pfds[1];
@@ -79,6 +82,7 @@ int llopen(char *port, int agent)
         char ua_frame_receptor[1], ua_frame[5];
 
         (void)signal(SIGALRM, pickup);
+        cur_transmission = 0;
         //ESTABLISHING CONNECTION
         while (cur_transmission < SET_FRAME.numTransmissions)
         {
@@ -465,12 +469,13 @@ int llwrite(int fd, char bytes)
         int poll_res = poll(pfds, 1, 2000);
         if (poll_res < 1)
         {
-            return -1;
+            break;
         }
         else if (pfds[0].revents && POLLIN)
         {
             read_bytes = read(fd, response, 5);
         }
+        tcflush(fd, TCIOFLUSH);
 
         //validation
         if (read_bytes == 5 && response[0] == FLAG && response[1] == A && response[4] == FLAG)
@@ -498,30 +503,33 @@ int llwrite(int fd, char bytes)
 
 char llread(int fd, char *buffer)
 {
-    int read_bytes, valid_frame = 0;
+    int read_bytes, valid_frame = 0, transmissions = 0;
     char i_frame[7];
 
     while (valid_frame == 0)
     {
         //read I frame
-        int poll_res = poll(pfds, 1, 10000);
+        int poll_res = poll(pfds, 1, DATA_FRAME.timeout * 1000);
         if (poll_res < 1)
         {
-            return -1;
+            if (++transmissions == DATA_FRAME.numTransmissions)
+            {
+                return -1;
+            }
+            continue;
         }
         else if (pfds[0].revents && POLLIN)
         {
             read_bytes = read(fd, i_frame, 7);
         }
-
         tcflush(fd, TCIOFLUSH);
 
         //verify data frame
         if (read_bytes == 7 && i_frame[0] == FLAG && i_frame[1] == A && i_frame[2] == CSET && i_frame[3] == (BCCSET) && i_frame[6] == FLAG)
         {
-
             //check wtv parity stuff..
             //i_frame[4] and i_frame[5]
+
             buffer[0] = i_frame[4];
             write(fd, RR, 5);
             valid_frame = 1;
@@ -530,6 +538,106 @@ char llread(int fd, char *buffer)
         {
             write(fd, REJ, 5);
         }
+
+        if (++transmissions == DATA_FRAME.numTransmissions)
+        {
+            return -1;
+        }
     }
     return read_bytes;
+}
+
+int llclose(int fd, int agent)
+{
+    int read_bytes;
+
+    cur_transmission = 0;
+    (void)signal(SIGALRM, pickup);
+    if (agent == 1)
+    {
+        alarm(DISC_FRAME.timeout);
+        while (cur_transmission < DISC_FRAME.numTransmissions)
+        {
+            write(fd, DISC_FRAME.frame, 5);
+
+            char response[5];
+
+            int poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
+            if (poll_res < 1)
+            {
+                continue;
+            }
+            else if (pfds[0].revents && POLLIN)
+            {
+                read_bytes = read(fd, response, 5);
+            }
+            tcflush(fd, TCIOFLUSH);
+
+            if (read_bytes == 5 && response[0] == FLAG && response[1] == A && response[2] == CDISC && response[3] == (BCCDISC) && response[4] == FLAG)
+            {
+                write(fd, UA_FRAME.frame, 5);
+                close(fd);
+                return 1;
+            }
+        }
+        printf("Issuer perspective: Connection unsuccessfully closed\n");
+        return -1;
+    }
+    else if (agent == 2)
+    {
+        int transmissions = 0;
+
+        while (transmissions != DISC_FRAME.numTransmissions)
+        {
+            char response[5];
+
+            int poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
+            if (poll_res < 1)
+            {
+                if (++transmissions == DATA_FRAME.numTransmissions)
+                {
+                    return -1;
+                }
+                continue;
+            }
+            else if (pfds[0].revents && POLLIN)
+            {
+                read_bytes = read(fd, response, 5);
+            }
+            tcflush(fd, TCIOFLUSH);
+
+            if (read_bytes == 5 && response[0] == FLAG && response[1] == A && response[2] == CDISC && response[3] == (BCCDISC) && response[4] == FLAG)
+            {
+                write(fd, DISC_FRAME.frame, 5);
+
+                poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
+                if (poll_res < 1)
+                {
+                    if (++transmissions == DATA_FRAME.numTransmissions)
+                    {
+                        printf("Number of transmissions exceeded\n");
+                        return -1;
+                    }
+                    continue;
+                }
+                else if (pfds[0].revents && POLLIN)
+                {
+                    read_bytes = read(fd, response, 5);
+                }
+                tcflush(fd, TCIOFLUSH);
+
+                if (read_bytes == 5 && response[0] == FLAG && response[1] == A && response[2] == CUA && response[3] == (BCCUA) && response[4] == FLAG)
+                {
+                    close(fd);
+                    return 1;
+                }
+            }
+            transmissions++;
+        }
+        printf("Receptor perspective: Connection unsuccessfully closed\n");
+        return -1;
+    }
+
+    perror("Invalid agent.\n");
+    return -1;
 }

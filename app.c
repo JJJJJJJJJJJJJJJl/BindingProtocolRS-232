@@ -113,6 +113,8 @@ int main(int argc, char **argv)
 
       printf("File successfully sent\n");
       fclose(file);
+
+      llclose(PORT, 1) > 0 ? printf("Issuer perspective: Connection successfully closed\n") : printf("Issuer perspective: Connection unsuccessfully closed\n");
     }
     //receptor
     else if (agent == 2)
@@ -141,6 +143,8 @@ int main(int argc, char **argv)
 
       printf("File successfully received\n");
       fclose(new_file);
+
+      llclose(PORT, 2) > 0 ? printf("Receptor perspective: Connection successfully closed\n") : printf("Receptor perspective: Connection unsuccessfully closed\n");
     }
   }
 

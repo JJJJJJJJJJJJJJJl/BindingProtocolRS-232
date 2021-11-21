@@ -6,10 +6,12 @@
 #define CUA 0x07
 #define CRR 0X05
 #define CREJ 0x01
+#define CDISC 0x11
 #define BCCSET A ^ CSET
 #define BCCUA A ^ CUA
 #define BCCRR A ^ CRR
 #define BCCREJ A ^ CREJ
+#define BCCDISC A ^ CDISC
 #define BCCI 0x02
 
 #define MAX_SIZE 10
