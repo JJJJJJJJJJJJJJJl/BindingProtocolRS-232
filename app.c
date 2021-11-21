@@ -102,16 +102,13 @@ int main(int argc, char **argv)
       while (fread(byte, sizeof(byte), 1, file) > 0)
       {
         DATA[cur_byte++] = byte[0];
-        //printf("%d \n", byte[0]);
-        //llwrite(PORT, byte[0]);
       }
 
-      int cur_byte_send = 1, llwrite_result;
+      int cur_byte_send = 1;
       //send file
       while (cur_byte_send != cur_byte)
       {
-        llwrite_result = llwrite(PORT, DATA[cur_byte_send]);
-        llwrite_result > 0 ? cur_byte_send++ : cur_byte_send;
+        llwrite(PORT, DATA[cur_byte_send++]);
       }
 
       printf("File successfully sent\n");
@@ -131,13 +128,9 @@ int main(int argc, char **argv)
       int llread_result;
 
       printf("Ready to receive file\n");
-      while ((llread_result = llread(PORT, received_byte)) > -2)
+      while ((llread_result = llread(PORT, received_byte)) > 0)
       {
-        if (llread_result > 0)
-        {
-          DATA[cur_byte] = received_byte[0];
-          cur_byte++;
-        }
+        DATA[cur_byte++] = received_byte[0];
       }
 
       //writting bytes to file

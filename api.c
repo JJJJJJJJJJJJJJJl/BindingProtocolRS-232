@@ -12,19 +12,19 @@
 #include "api.h"
 #include "protocol.h"
 
-int count = 0, flag;
+int cur_transmission = 0, flag;
 void pickup()
 {
     flag = 1;
-    count++;
+    cur_transmission++;
 }
 
 //establishing connection frames
-linkLayer SET_FRAME = {"/dev/ttyS10", 0, 1, 3, 3, {FLAG, A, CSET, BCCSET, FLAG}};
-linkLayer UA_FRAME = {"/dev/ttyS11", 0, 1, 3, 3, {FLAG, A, CUA, BCCUA, FLAG}};
+linkLayer SET_FRAME = {3, 3, {FLAG, A, CSET, BCCSET, FLAG}};
+linkLayer UA_FRAME = {3, 3, {FLAG, A, CUA, BCCUA, FLAG}};
 
 //information frames
-char DATA_FRAME[7] = {FLAG, A, CSET, BCCSET, -1, BCCI, FLAG};
+linkLayer DATA_FRAME = {2, 3, {FLAG, A, CSET, BCCSET, -1, BCCI, FLAG}};
 
 //verifying information frames
 char RR[5] = {FLAG, A, CRR, BCCRR, FLAG};
@@ -41,15 +41,15 @@ int llopen(char *port, int agent)
     {
         connection = 0;
 
-        PORT = open(SET_FRAME.port, O_RDWR | O_NOCTTY);
+        PORT = open(port, O_RDWR | O_NOCTTY);
         if (PORT < 0)
         {
-            perror(SET_FRAME.port);
+            perror(port);
             exit(-1);
         }
 
         if (tcgetattr(PORT, &oldtio) == -1)
-        { //save current port settings
+        {
             perror("tcgetattr");
             exit(-1);
         }
@@ -62,11 +62,10 @@ int llopen(char *port, int agent)
         newtio.c_iflag = IGNPAR;
         newtio.c_oflag = 0;
 
-        //set input mode (non-canonical, no echo,...)
         newtio.c_lflag = 0;
 
-        newtio.c_cc[VTIME] = 0; //inter-character timer unused
-        newtio.c_cc[VMIN] = 0;  //blocking read until 5 chars received
+        newtio.c_cc[VTIME] = 0;
+        newtio.c_cc[VMIN] = 0;
 
         tcflush(PORT, TCIOFLUSH);
 
@@ -81,7 +80,7 @@ int llopen(char *port, int agent)
 
         (void)signal(SIGALRM, pickup);
         //ESTABLISHING CONNECTION
-        while (count < 3)
+        while (cur_transmission < SET_FRAME.numTransmissions)
         {
             //SEND SET FRAME
             int bytes = write(PORT, SET_FRAME.frame, 5);
@@ -238,20 +237,20 @@ int llopen(char *port, int agent)
                 }
             }
             tcflush(PORT, TCIOFLUSH);
-            count++;
+            cur_transmission++;
         }
     }
     else if (agent == 2)
     {
-        int PORT = open(UA_FRAME.port, O_RDWR | O_NOCTTY);
+        int PORT = open(port, O_RDWR | O_NOCTTY);
         if (PORT < 0)
         {
-            perror("Port could not be opened.");
+            perror(port);
             exit(-1);
         }
 
         if (tcgetattr(PORT, &oldtio) == -1)
-        { //save current port settings
+        {
             perror("tcgetattr");
             exit(-1);
         }
@@ -264,11 +263,10 @@ int llopen(char *port, int agent)
         newtio.c_iflag = IGNPAR;
         newtio.c_oflag = 0;
 
-        //set input mode (non-canonical, no echo,...)
         newtio.c_lflag = 0;
 
-        newtio.c_cc[VTIME] = 0; //inter-character timer unused
-        newtio.c_cc[VMIN] = 0;  //blocking read until 5 chars received
+        newtio.c_cc[VTIME] = 0;
+        newtio.c_cc[VMIN] = 0;
 
         tcflush(PORT, TCIOFLUSH);
 
@@ -441,7 +439,7 @@ int llopen(char *port, int agent)
                 }
             }
             tcflush(PORT, TCIOFLUSH);
-            count++;
+            cur_transmission++;
         }
     }
 
@@ -451,84 +449,87 @@ int llopen(char *port, int agent)
 
 int llwrite(int fd, char bytes)
 {
-    DATA_FRAME[4] = bytes;
+    DATA_FRAME.frame[4] = bytes;
     int write_bytes, read_bytes;
 
+    cur_transmission = 0;
     (void)signal(SIGALRM, pickup);
-    flag = 0;
-    alarm(2);
-    //send I frame
-    write_bytes = write(fd, DATA_FRAME, 7);
+    while (cur_transmission < DATA_FRAME.numTransmissions)
+    {
+        alarm(DATA_FRAME.timeout);
+        //send I frame
+        write_bytes = write(fd, DATA_FRAME.frame, 7);
 
-    char response[5];
-    //receive RR or REJ
-    int poll_res = poll(pfds, 1, 2000);
-    if (poll_res < 1)
-    {
-        return -1;
-    }
-    else if (pfds[0].revents && POLLIN)
-    {
-        read_bytes = read(fd, response, 5);
-    }
-
-    //validation
-    if (read_bytes == 5 && response[0] == FLAG && response[1] == A && response[4] == FLAG)
-    {
-        if (response[2] == CRR && response[3] == (BCCRR))
+        char response[5];
+        //receive RR or REJ
+        int poll_res = poll(pfds, 1, 2000);
+        if (poll_res < 1)
         {
-            return write_bytes;
-        }
-        else if (response[2] == CREJ && response[3] == (BCCREJ))
-        {
-            printf("REJ: Frame was rejected");
             return -1;
+        }
+        else if (pfds[0].revents && POLLIN)
+        {
+            read_bytes = read(fd, response, 5);
+        }
+
+        //validation
+        if (read_bytes == 5 && response[0] == FLAG && response[1] == A && response[4] == FLAG)
+        {
+            if (response[2] == CRR && response[3] == (BCCRR))
+            {
+                break;
+            }
+            else if (response[2] == CREJ && response[3] == (BCCREJ))
+            {
+                printf("REJ: Frame was rejected");
+            }
+            else
+            {
+                printf("RR/REJ frame had errors\n");
+            }
         }
         else
         {
             printf("RR/REJ frame had errors\n");
-            return -1;
         }
     }
-    else
-    {
-        printf("RR/REJ frame had errors\n");
-        return -1;
-    }
+    return write_bytes;
 }
 
 char llread(int fd, char *buffer)
 {
-    int read_bytes;
+    int read_bytes, valid_frame = 0;
     char i_frame[7];
 
-    //read I frame
-    int poll_res = poll(pfds, 1, 10000);
-    if (poll_res < 1)
+    while (valid_frame == 0)
     {
-        return -2;
-    }
-    else if (pfds[0].revents && POLLIN)
-    {
-        read_bytes = read(fd, i_frame, 7);
-    }
+        //read I frame
+        int poll_res = poll(pfds, 1, 10000);
+        if (poll_res < 1)
+        {
+            return -1;
+        }
+        else if (pfds[0].revents && POLLIN)
+        {
+            read_bytes = read(fd, i_frame, 7);
+        }
 
-    tcflush(fd, TCIOFLUSH);
+        tcflush(fd, TCIOFLUSH);
 
-    //verify data frame
-    if (read_bytes == 7 && i_frame[0] == FLAG && i_frame[1] == A && i_frame[2] == CSET && i_frame[3] == (BCCSET))
-    {
+        //verify data frame
+        if (read_bytes == 7 && i_frame[0] == FLAG && i_frame[1] == A && i_frame[2] == CSET && i_frame[3] == (BCCSET) && i_frame[6] == FLAG)
+        {
 
-        //check wtv parity stuff..
-        //i_frame[4] and i_frame[5]
-
-        buffer[0] = i_frame[4];
-        write(fd, RR, 5);
-        return read_bytes;
+            //check wtv parity stuff..
+            //i_frame[4] and i_frame[5]
+            buffer[0] = i_frame[4];
+            write(fd, RR, 5);
+            valid_frame = 1;
+        }
+        else
+        {
+            write(fd, REJ, 5);
+        }
     }
-    else
-    {
-        write(fd, REJ, 5);
-        return -1;
-    }
+    return read_bytes;
 }
