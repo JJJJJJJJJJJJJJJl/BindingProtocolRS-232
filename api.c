@@ -19,23 +19,6 @@ void pickup() // atende alarme
     count++;
 }
 
-char *int2bin(int i)
-{
-    size_t bits = sizeof(int) * CHAR_BIT;
-
-    char *str = malloc(bits + 1);
-    if (!str)
-        return NULL;
-    str[bits] = 0;
-
-    // type punning because signed shift is implementation-defined
-    unsigned u = *(unsigned *)&i;
-    for (; bits--; u >>= 1)
-        str[bits] = u & 1 ? '1' : '0';
-
-    return str;
-}
-
 //establishing connection frames
 linkLayer SET_FRAME = {"/dev/ttyS10", 0, 1, 3, 3, {FLAG, A, CSET, BCCSET, FLAG}};
 linkLayer UA_FRAME = {"/dev/ttyS11", 0, 1, 3, 3, {FLAG, A, CUA, BCCUA, FLAG}};
