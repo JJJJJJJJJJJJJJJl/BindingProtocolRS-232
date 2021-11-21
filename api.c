@@ -93,7 +93,7 @@ int llopen(char *port, int agent)
             exit(-1);
         }
 
-        int z = 0, ua_frame_received = 0;
+        int machine_state = 0, ua_frame_received = 0;
         char ua_frame_receptor[1], ua_frame[5];
 
         (void)signal(SIGALRM, pickup);
@@ -113,7 +113,7 @@ int llopen(char *port, int agent)
 
             //STATE MACHINE - READING UA_FRAME
             int ua_frame_bytes, poll_res;
-            while (z != 5)
+            while (machine_state != 5)
             {
 
                 if (flag)
@@ -144,67 +144,67 @@ int llopen(char *port, int agent)
                         if (ua_frame_bytes > 0)
                         {
                             //checking flag values
-                            if (z == 0 || z == 4)
+                            if (machine_state == 0 || machine_state == 4)
                             {
                                 //FLAG received,save and move on
                                 if (ua_frame_receptor[0] == FLAG)
                                 {
-                                    if (z == 4)
+                                    if (machine_state == 4)
                                     {
                                         ua_frame_received = 1;
                                     }
-                                    ua_frame[z++] = ua_frame_receptor[0];
+                                    ua_frame[machine_state++] = ua_frame_receptor[0];
                                 }
                                 //something else received, so it goes back to start
                                 else
                                 {
-                                    z = 0;
+                                    machine_state = 0;
                                     memset(ua_frame, 0, sizeof(ua_frame));
                                     break;
                                 }
                             }
                             //checking A value
-                            else if (z == 1)
+                            else if (machine_state == 1)
                             {
                                 //A received, save and move on
                                 if (ua_frame_receptor[0] == A)
                                 {
-                                    ua_frame[z++] = ua_frame_receptor[0];
+                                    ua_frame[machine_state++] = ua_frame_receptor[0];
                                 }
                                 //FLAG received, so it stays waiting for an A
                                 else if (ua_frame_receptor[0] == FLAG)
                                 {
                                     ua_frame[0] = FLAG;
-                                    z = 1;
+                                    machine_state = 1;
                                     break;
                                 }
                                 //something else received, so it goes back to start
                                 else
                                 {
-                                    z = 0;
+                                    machine_state = 0;
                                     memset(ua_frame, 0, sizeof(ua_frame));
                                     break;
                                 }
                             }
                             //checking C value
-                            else if (z == 2)
+                            else if (machine_state == 2)
                             {
                                 //C received, save and move on
                                 if (ua_frame_receptor[0] == CUA)
                                 {
-                                    ua_frame[z++] = ua_frame_receptor[0];
+                                    ua_frame[machine_state++] = ua_frame_receptor[0];
                                 }
                                 //FLAG received, so go back to waiting for an A
                                 else if (ua_frame_receptor[0] == FLAG)
                                 {
                                     ua_frame[0] = FLAG;
-                                    z = 1;
+                                    machine_state = 1;
                                     break;
                                 }
                                 //something else received, so it goes back to start
                                 else
                                 {
-                                    z = 0;
+                                    machine_state = 0;
                                     memset(ua_frame, 0, sizeof(ua_frame));
                                     break;
                                 }
@@ -215,19 +215,19 @@ int llopen(char *port, int agent)
                                 //BCC rceived, save and move on
                                 if (ua_frame_receptor[0] == (BCCUA))
                                 {
-                                    ua_frame[z++] = ua_frame_receptor[0];
+                                    ua_frame[machine_state++] = ua_frame_receptor[0];
                                 }
                                 //FLAG received, so go back to waiting for an A
                                 else if (ua_frame_receptor[0] == FLAG)
                                 {
                                     ua_frame[0] = FLAG;
-                                    z = 1;
+                                    machine_state = 1;
                                     break;
                                 }
                                 //something else received, so it goes back to start
                                 else
                                 {
-                                    z = 0;
+                                    machine_state = 0;
                                     memset(ua_frame, 0, sizeof(ua_frame));
                                     break;
                                 }
@@ -235,7 +235,7 @@ int llopen(char *port, int agent)
                         }
                         else
                         {
-                            z++;
+                            machine_state++;
                         }
                     }
                 }
@@ -244,8 +244,7 @@ int llopen(char *port, int agent)
             if (ua_frame_received)
             {
                 connection = 1;
-                printf("UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d | FLAG: %d\n", ua_frame[0], ua_frame[1], ua_frame[2], ua_frame[3], ua_frame[4]);
-                printf("Connection (FROM ISSUER PERSPECTIVE) has been established..\n");
+                printf("Issuer perspective: Connection has been established..\n");
                 return PORT;
             }
             else
@@ -296,7 +295,7 @@ int llopen(char *port, int agent)
             exit(-1);
         }
 
-        int z = 0, set_frame_received = 0;
+        int machine_state = 0, set_frame_received = 0;
         char set_frame_receptor[1], set_frame[5];
 
         (void)signal(SIGALRM, pickup);
@@ -309,7 +308,7 @@ int llopen(char *port, int agent)
 
             //STATE MACHINE - READING SET_FRAME
             int set_frame_bytes, poll_res;
-            while (z != 5)
+            while (machine_state != 5)
             {
 
                 if (flag)
@@ -340,67 +339,67 @@ int llopen(char *port, int agent)
                         if (set_frame_bytes > 0)
                         {
                             //checking flag values
-                            if (z == 0 || z == 4)
+                            if (machine_state == 0 || machine_state == 4)
                             {
                                 //FLAG received,save and move on
                                 if (set_frame_receptor[0] == FLAG)
                                 {
-                                    if (z == 4)
+                                    if (machine_state == 4)
                                     {
                                         set_frame_received = 1;
                                     }
-                                    set_frame[z++] = set_frame_receptor[0];
+                                    set_frame[machine_state++] = set_frame_receptor[0];
                                 }
                                 //something else received, so it goes back to start
                                 else
                                 {
-                                    z = 0;
+                                    machine_state = 0;
                                     memset(set_frame, 0, sizeof(set_frame));
                                     break;
                                 }
                             }
                             //checking A value
-                            else if (z == 1)
+                            else if (machine_state == 1)
                             {
                                 //A received, save and move on
                                 if (set_frame_receptor[0] == A)
                                 {
-                                    set_frame[z++] = set_frame_receptor[0];
+                                    set_frame[machine_state++] = set_frame_receptor[0];
                                 }
                                 //FLAG received, so it stays waiting for an A
                                 else if (set_frame_receptor[0] == FLAG)
                                 {
                                     set_frame[0] = FLAG;
-                                    z = 1;
+                                    machine_state = 1;
                                     break;
                                 }
                                 //something else received, so it goes back to start
                                 else
                                 {
-                                    z = 0;
+                                    machine_state = 0;
                                     memset(set_frame, 0, sizeof(set_frame));
                                     break;
                                 }
                             }
                             //checking C value
-                            else if (z == 2)
+                            else if (machine_state == 2)
                             {
                                 //C received, save and move on
                                 if (set_frame_receptor[0] == CSET)
                                 {
-                                    set_frame[z++] = set_frame_receptor[0];
+                                    set_frame[machine_state++] = set_frame_receptor[0];
                                 }
                                 //FLAG received, so go back to waiting for an A
                                 else if (set_frame_receptor[0] == FLAG)
                                 {
                                     set_frame[0] = FLAG;
-                                    z = 1;
+                                    machine_state = 1;
                                     break;
                                 }
                                 //something else received, so it goes back to start
                                 else
                                 {
-                                    z = 0;
+                                    machine_state = 0;
                                     memset(set_frame, 0, sizeof(set_frame));
                                     break;
                                 }
@@ -411,19 +410,19 @@ int llopen(char *port, int agent)
                                 //BCC rceived, save and move on
                                 if (set_frame_receptor[0] == (BCCSET))
                                 {
-                                    set_frame[z++] = set_frame_receptor[0];
+                                    set_frame[machine_state++] = set_frame_receptor[0];
                                 }
                                 //FLAG received, so go back to waiting for an A
                                 else if (set_frame_receptor[0] == FLAG)
                                 {
                                     set_frame[0] = FLAG;
-                                    z = 1;
+                                    machine_state = 1;
                                     break;
                                 }
                                 //something else received, so it goes back to start
                                 else
                                 {
-                                    z = 0;
+                                    machine_state = 0;
                                     memset(set_frame, 0, sizeof(set_frame));
                                     break;
                                 }
@@ -431,7 +430,7 @@ int llopen(char *port, int agent)
                         }
                         else
                         {
-                            z++;
+                            machine_state++;
                         }
                     }
                 }
@@ -448,8 +447,7 @@ int llopen(char *port, int agent)
                 {
                     bytes = write(PORT, UA_FRAME.frame, 5);
                 }
-                fprintf(stderr, "UA_FRAME Received - FLAG: %d | A: %d | C: %d | B: %d | FLAG: %d\n", set_frame[0], set_frame[1], set_frame[2], set_frame[3], set_frame[4]);
-                fprintf(stderr, "Connection (FROM RECEIVER PERSPECTIVE) has been established..\n");
+                fprintf(stderr, "Receptor perspective: Connection has been established..\n");
                 return PORT;
             }
             else
@@ -463,6 +461,7 @@ int llopen(char *port, int agent)
             count++;
         }
     }
+
     perror("Invalid agent.\n");
     return -1;
 }

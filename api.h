@@ -1,5 +1,5 @@
-#ifndef PDD_LIST_H_INCLUDED
-#define PDD_LIST_H_INCLUDED
+#ifndef API_H_INCLUDED
+#define API_H_INCLUDED
 
 int llopen(char *port, int agent);
 int llwrite(int fd, char bytes);
