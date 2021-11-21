@@ -227,7 +227,7 @@ int llopen(char *port, int agent)
             if (ua_frame_received)
             {
                 connection = 1;
-                printf("Issuer perspective: Connection has been established..\n");
+                printf("Issuer perspective: Connection has been established\n");
                 return PORT;
             }
             else
@@ -430,7 +430,7 @@ int llopen(char *port, int agent)
                 {
                     bytes = write(PORT, UA_FRAME.frame, 5);
                 }
-                fprintf(stderr, "Receptor perspective: Connection has been established..\n");
+                fprintf(stderr, "Receptor perspective: Connection has been established\n");
                 return PORT;
             }
             else

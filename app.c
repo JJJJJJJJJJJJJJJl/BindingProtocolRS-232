@@ -73,14 +73,14 @@ int main(int argc, char **argv)
       FILE *file;
 
       //Open file and handle error
-      if ((file = fopen("pinguim.gif", "rb")) == NULL)
+      if ((file = fopen(file_name, "rb")) == NULL)
       {
         printf("Error opening file\n");
         exit(1);
       }
       else
       {
-        printf("File opened\n");
+        printf("File '%s' opened\n", file_name);
       }
 
       //number of bytes of file
@@ -100,8 +100,6 @@ int main(int argc, char **argv)
       //read file
       while (fread(byte, sizeof(byte), 1, file) > 0)
       {
-        int llwrite_result = -1;
-        char *binary_string;
         //printf("%d \n", byte[0]);
         llwrite(PORT, byte[0]);
       }
