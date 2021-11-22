@@ -469,7 +469,7 @@ int llwrite(int fd, char bytes)
         int poll_res = poll(pfds, 1, 2000);
         if (poll_res < 1)
         {
-            break;
+            return -1;
         }
         else if (pfds[0].revents && POLLIN)
         {
@@ -487,15 +487,18 @@ int llwrite(int fd, char bytes)
             else if (response[2] == CREJ && response[3] == (BCCREJ))
             {
                 printf("REJ: Frame was rejected");
+                cur_transmission++;
             }
             else
             {
                 printf("RR/REJ frame had errors\n");
+                cur_transmission++;
             }
         }
         else
         {
             printf("RR/REJ frame had errors\n");
+            cur_transmission++;
         }
     }
     return write_bytes;
@@ -503,20 +506,16 @@ int llwrite(int fd, char bytes)
 
 char llread(int fd, char *buffer)
 {
-    int read_bytes, valid_frame = 0, transmissions = 0;
+    int read_bytes;
     char i_frame[7];
 
-    while (valid_frame == 0)
+    while (1)
     {
         //read I frame
         int poll_res = poll(pfds, 1, DATA_FRAME.timeout * 1000);
         if (poll_res < 1)
         {
-            if (++transmissions == DATA_FRAME.numTransmissions)
-            {
-                return -1;
-            }
-            continue;
+            return -1;
         }
         else if (pfds[0].revents && POLLIN)
         {
@@ -525,38 +524,39 @@ char llread(int fd, char *buffer)
         tcflush(fd, TCIOFLUSH);
 
         //verify data frame
-        if (read_bytes == 7 && i_frame[0] == FLAG && i_frame[1] == A && i_frame[2] == CSET && i_frame[3] == (BCCSET) && i_frame[6] == FLAG)
+        if (read_bytes == 7)
         {
-            //check wtv parity stuff..
-            //i_frame[4] and i_frame[5]
+            if (i_frame[0] == FLAG && i_frame[1] == A && i_frame[2] == CSET && i_frame[3] == (BCCSET) && i_frame[6] == FLAG)
+            {
+                //check wtv parity stuff..
+                //i_frame[4] and i_frame[5]
 
-            buffer[0] = i_frame[4];
-            write(fd, RR, 5);
-            valid_frame = 1;
+                buffer[0] = i_frame[4];
+                write(fd, RR, 5);
+                return read_bytes;
+            }
+            else
+            {
+                write(fd, REJ, 5);
+            }
         }
         else
-        {
-            write(fd, REJ, 5);
-        }
-
-        if (++transmissions == DATA_FRAME.numTransmissions)
         {
             return -1;
         }
     }
-    return read_bytes;
+    return -1;
 }
 
 int llclose(int fd, int agent)
 {
     int read_bytes;
 
-    cur_transmission = 0;
     (void)signal(SIGALRM, pickup);
     if (agent == 1)
     {
         alarm(DISC_FRAME.timeout);
-        while (cur_transmission < DISC_FRAME.numTransmissions)
+        while (1)
         {
             write(fd, DISC_FRAME.frame, 5);
 
@@ -579,25 +579,30 @@ int llclose(int fd, int agent)
                 close(fd);
                 return 1;
             }
+            else
+            {
+                return -1;
+            }
         }
         printf("Issuer perspective: Connection unsuccessfully closed\n");
         return -1;
     }
     else if (agent == 2)
     {
-        int transmissions = 0;
+        int max_wait = 0;
 
-        while (transmissions != DISC_FRAME.numTransmissions)
+        while (1)
         {
+            if (max_wait > 10)
+            {
+                return -1;
+            }
+
             char response[5];
 
             int poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
             if (poll_res < 1)
             {
-                if (++transmissions == DATA_FRAME.numTransmissions)
-                {
-                    return -1;
-                }
                 continue;
             }
             else if (pfds[0].revents && POLLIN)
@@ -613,12 +618,7 @@ int llclose(int fd, int agent)
                 poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
                 if (poll_res < 1)
                 {
-                    if (++transmissions == DATA_FRAME.numTransmissions)
-                    {
-                        printf("Number of transmissions exceeded\n");
-                        return -1;
-                    }
-                    continue;
+                    return -1;
                 }
                 else if (pfds[0].revents && POLLIN)
                 {
@@ -631,8 +631,16 @@ int llclose(int fd, int agent)
                     close(fd);
                     return 1;
                 }
+                else
+                {
+                    max_wait++;
+                    continue;
+                }
             }
-            transmissions++;
+            else
+            {
+                continue;
+            }
         }
         printf("Receptor perspective: Connection unsuccessfully closed\n");
         return -1;

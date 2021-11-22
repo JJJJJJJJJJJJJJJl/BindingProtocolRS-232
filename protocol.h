@@ -6,7 +6,7 @@
 #define CUA 0x07
 #define CRR 0X05
 #define CREJ 0x01
-#define CDISC 0x11
+#define CDISC 0x0b
 #define BCCSET A ^ CSET
 #define BCCUA A ^ CUA
 #define BCCRR A ^ CRR
