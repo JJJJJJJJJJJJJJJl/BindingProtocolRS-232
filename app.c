@@ -25,6 +25,28 @@ int get_file_bytes(FILE *file)
   return size;
 }
 
+char *slice_array(char *array, int start, int end)
+{
+  int numElements = (end - start + 1);
+  int numBytes = sizeof(int) * numElements;
+
+  char *slice = malloc(numBytes);
+  memcpy(slice, array + start, numBytes);
+
+  return slice;
+}
+
+char compareArray(char *a, char *b, int size)
+{
+  int i;
+  for (i = 0; i < size; i++)
+  {
+    if (a[i] != b[i])
+      return 1;
+  }
+  return 0;
+}
+
 int main(int argc, char **argv)
 {
 
@@ -104,11 +126,21 @@ int main(int argc, char **argv)
         DATA[cur_byte++] = byte[0];
       }
 
-      int cur_byte_send = 1;
+      int bytes_to_pass = 256;
+      int l = 0, r = bytes_to_pass;
       //send file
-      while (cur_byte_send != cur_byte)
+      while (r - l > 0)
       {
-        llwrite(PORT, DATA[cur_byte_send++]);
+        llwrite(PORT, slice_array(DATA, l, r), r - l);
+        l = r;
+        if (r + bytes_to_pass > cur_byte)
+        {
+          r = cur_byte;
+        }
+        else
+        {
+          r += bytes_to_pass;
+        }
       }
 
       printf("File successfully sent\n");
@@ -126,19 +158,38 @@ int main(int argc, char **argv)
         exit(1);
       }
 
-      char received_byte[1];
+      char received_bytes[1000];
+      char last_received_bytes[1000];
+      int bytes_passed = 0;
       int llread_result;
-
+      int a = 0;
+      int k = 0;
       printf("Ready to receive file\n");
-      while ((llread_result = llread(PORT, received_byte)) > 0)
+      while ((llread_result = llread(PORT, received_bytes)) > -2)
       {
-        DATA[cur_byte++] = received_byte[0];
-      }
+        if (k == 0)
+        {
+          bytes_passed = llread_result;
+        }
+        if (llread_result > -1)
+        {
+          if (k == 0 || (compareArray(received_bytes, last_received_bytes, strlen(received_bytes) + 1) == 1 && k != 0))
+          {
+            for (int j = 0; j < llread_result - 1; j++)
+            {
 
-      //writting bytes to file
-      for (int i = 1; i < cur_byte; i++)
-      {
-        fputc(DATA[i], new_file);
+              if (a > 0)
+                fputc(received_bytes[j], new_file);
+              a++;
+            }
+            memcpy(received_bytes, last_received_bytes, strlen(received_bytes) + 1);
+          }
+        }
+        if (llread_result < bytes_passed)
+        {
+          break;
+        }
+        k++;
       }
 
       printf("File successfully received\n");

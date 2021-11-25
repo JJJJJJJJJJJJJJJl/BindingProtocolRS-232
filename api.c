@@ -17,6 +17,33 @@ void pickup()
 {
     flag = 1;
     cur_transmission++;
+    printf("fodase\n");
+}
+
+char *decimal_to_binary(int n)
+{
+    int c, d, t;
+    char *p;
+
+    t = 0;
+    p = (char *)malloc(8 + 1);
+
+    if (p == NULL)
+        exit(EXIT_FAILURE);
+
+    for (c = 7; c >= 0; c--)
+    {
+        d = n >> c;
+
+        if (d & 1)
+            *(p + t) = 1 + '0';
+        else
+            *(p + t) = 0 + '0';
+
+        t++;
+    }
+    *(p + t) = '\0';
+    return p;
 }
 
 //establishing connection frames
@@ -24,7 +51,7 @@ linkLayer SET_FRAME = {3, 3, {FLAG, A, CSET, BCCSET, FLAG}};
 linkLayer UA_FRAME = {3, 3, {FLAG, A, CUA, BCCUA, FLAG}};
 
 //information frames
-linkLayer DATA_FRAME = {2, 3, {FLAG, A, CSET, BCCSET, -1, BCCI, FLAG}};
+linkLayer DATA_FRAME = {2, 3, {}};
 
 //verifying information frames
 char RR[5] = {FLAG, A, CRR, BCCRR, FLAG};
@@ -231,6 +258,7 @@ int llopen(char *port, int agent)
             {
                 connection = 1;
                 printf("Issuer perspective: Connection has been established\n");
+                alarm(0);
                 return PORT;
             }
             else
@@ -433,6 +461,7 @@ int llopen(char *port, int agent)
                     bytes = write(PORT, UA_FRAME.frame, 5);
                 }
                 fprintf(stderr, "Receptor perspective: Connection has been established\n");
+                alarm(0);
                 return PORT;
             }
             else
@@ -451,9 +480,71 @@ int llopen(char *port, int agent)
     return -1;
 }
 
-int llwrite(int fd, char bytes)
+int llwrite(int fd, char *bytes, int length)
 {
-    DATA_FRAME.frame[4] = bytes;
+    char binary_strings[length][8];
+    DATA_FRAME.frame[0] = FLAG;
+    DATA_FRAME.frame[1] = A;
+    DATA_FRAME.frame[2] = CSET;
+    DATA_FRAME.frame[3] = BCCSET;
+    for (int j = 4, k = 0; j < (length << 1) + 4 && k < length; j += 2, k++)
+    {
+        //STUFFING
+        if (bytes[k] == FLAG)
+        {
+            DATA_FRAME.frame[j] = LEAK;
+            DATA_FRAME.frame[j + 1] = FLAGXOR;
+        }
+        else if (bytes[k] == LEAK)
+        {
+            DATA_FRAME.frame[j] = LEAK;
+            DATA_FRAME.frame[j + 1] = LEAKXOR;
+        }
+        else
+        {
+            DATA_FRAME.frame[j] = bytes[k];
+        }
+        strcpy(binary_strings[k], decimal_to_binary(bytes[k]));
+    }
+    //generating data BCC
+    char BCCI[8];
+    for (int j = 0; j < 8; j++)
+    {
+        int ones = 0;
+        for (int k = 0; k < length; k++)
+        {
+            if (binary_strings[j][k] == '1')
+            {
+                ones++;
+            }
+        }
+        if (ones % 2 == 0)
+        {
+            BCCI[j] = '0';
+        }
+        else
+        {
+            BCCI[j] = '1';
+        }
+    }
+    DATA_FRAME.frame[(length << 1) + 4 + 1] = (char)strtol(BCCI, NULL, 2);
+
+    if (DATA_FRAME.frame[(length << 1) + 4 + 1] == FLAG)
+    {
+        DATA_FRAME.frame[(length << 1) + 4 + 1] = LEAK;
+        DATA_FRAME.frame[(length << 1) + 4 + 2] = FLAGXOR;
+    }
+    else if (DATA_FRAME.frame[(length << 1) + 4 + 1] == LEAK)
+    {
+        DATA_FRAME.frame[(length << 1) + 4 + 1] = LEAK;
+        DATA_FRAME.frame[(length << 1) + 4 + 2] = LEAKXOR;
+    }
+    else
+    {
+        DATA_FRAME.frame[(length << 1) + 4 + 2] = 0;
+    }
+    DATA_FRAME.frame[(length << 1) + 4 + 3] = FLAG;
+
     int write_bytes, read_bytes;
 
     cur_transmission = 0;
@@ -462,13 +553,14 @@ int llwrite(int fd, char bytes)
     {
         alarm(DATA_FRAME.timeout);
         //send I frame
-        write_bytes = write(fd, DATA_FRAME.frame, 7);
+        write_bytes = write(fd, DATA_FRAME.frame, (length << 1) + 4 + 4);
 
         char response[5];
         //receive RR or REJ
-        int poll_res = poll(pfds, 1, 2000);
+        int poll_res = poll(pfds, 1, 5000);
         if (poll_res < 1)
         {
+            alarm(0);
             return -1;
         }
         else if (pfds[0].revents && POLLIN)
@@ -486,7 +578,7 @@ int llwrite(int fd, char bytes)
             }
             else if (response[2] == CREJ && response[3] == (BCCREJ))
             {
-                printf("REJ: Frame was rejected");
+                printf("REJ: Frame was rejected\n");
                 cur_transmission++;
             }
             else
@@ -501,51 +593,60 @@ int llwrite(int fd, char bytes)
             cur_transmission++;
         }
     }
+    alarm(0);
     return write_bytes;
 }
 
-char llread(int fd, char *buffer)
+int llread(int fd, char *buffer)
 {
+    //((length + 1) << 1) + 5
+    int len = 519;
     int read_bytes;
-    char i_frame[7];
+    char i_frame[len + 1];
 
-    while (1)
+    //read I frame
+    int poll_res = poll(pfds, 1, DATA_FRAME.timeout * 1000);
+    if (poll_res < 0)
     {
-        //read I frame
-        int poll_res = poll(pfds, 1, DATA_FRAME.timeout * 1000);
-        if (poll_res < 1)
-        {
-            return -1;
-        }
-        else if (pfds[0].revents && POLLIN)
-        {
-            read_bytes = read(fd, i_frame, 7);
-        }
-        tcflush(fd, TCIOFLUSH);
+        return -2;
+    }
+    else if (poll_res == 0)
+    {
+        printf("Port had no data to be read\n");
+        return -2;
+    }
+    else if (pfds[0].revents && POLLIN)
+    {
+        read_bytes = read(fd, i_frame, len + 1);
+    }
 
-        //verify data frame
-        if (read_bytes == 7)
-        {
-            if (i_frame[0] == FLAG && i_frame[1] == A && i_frame[2] == CSET && i_frame[3] == (BCCSET) && i_frame[6] == FLAG)
-            {
-                //check wtv parity stuff..
-                //i_frame[4] and i_frame[5]
+    //verify data frame
+    if (i_frame[0] != FLAG || i_frame[1] != A || i_frame[2] != CSET || i_frame[3] != (BCCSET) || i_frame[len] != FLAG)
+    {
+        printf("Frame had errors\n");
+        write(fd, REJ, 5);
+        return -1;
+    }
 
-                buffer[0] = i_frame[4];
-                write(fd, RR, 5);
-                return read_bytes;
-            }
-            else
-            {
-                write(fd, REJ, 5);
-            }
+    for (int j = 4, k = 0; j < read_bytes - 3 && k < (read_bytes - 8) >> 1; j += 2, k++)
+    {
+        //DESTUFFING
+        if (i_frame[j] == LEAK && i_frame[j + 1] == FLAGXOR)
+        {
+            buffer[k] = FLAG;
+        }
+        else if (i_frame[j] == LEAK && i_frame[j + 1] == LEAKXOR)
+        {
+            buffer[k] = LEAK;
         }
         else
         {
-            return -1;
+            buffer[k] = i_frame[j];
         }
     }
-    return -1;
+
+    write(fd, RR, 5);
+    return (read_bytes - 6) >> 1;
 }
 
 int llclose(int fd, int agent)
@@ -555,7 +656,7 @@ int llclose(int fd, int agent)
     (void)signal(SIGALRM, pickup);
     if (agent == 1)
     {
-        alarm(DISC_FRAME.timeout);
+        alarm(DISC_FRAME.timeout + 5);
         while (1)
         {
             write(fd, DISC_FRAME.frame, 5);
@@ -563,28 +664,30 @@ int llclose(int fd, int agent)
             char response[5];
 
             int poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
-            if (poll_res < 1)
+            if (poll_res < 0)
             {
+                printf("Poll() failed or alarm went off\n");
                 continue;
+            }
+            else if (poll_res == 0)
+            {
+                printf("Port had no data to be read\n");
             }
             else if (pfds[0].revents && POLLIN)
             {
                 read_bytes = read(fd, response, 5);
             }
-            tcflush(fd, TCIOFLUSH);
 
             if (read_bytes == 5 && response[0] == FLAG && response[1] == A && response[2] == CDISC && response[3] == (BCCDISC) && response[4] == FLAG)
             {
                 write(fd, UA_FRAME.frame, 5);
                 close(fd);
+                alarm(0);
                 return 1;
-            }
-            else
-            {
-                return -1;
             }
         }
         printf("Issuer perspective: Connection unsuccessfully closed\n");
+        alarm(0);
         return -1;
     }
     else if (agent == 2)
@@ -601,9 +704,13 @@ int llclose(int fd, int agent)
             char response[5];
 
             int poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
-            if (poll_res < 1)
+            if (poll_res < 0)
             {
-                continue;
+                printf("Poll() failed or alarm went off\n");
+            }
+            else if (poll_res == 0)
+            {
+                printf("Port had no data to be read\n");
             }
             else if (pfds[0].revents && POLLIN)
             {
@@ -629,23 +736,16 @@ int llclose(int fd, int agent)
                 if (read_bytes == 5 && response[0] == FLAG && response[1] == A && response[2] == CUA && response[3] == (BCCUA) && response[4] == FLAG)
                 {
                     close(fd);
+                    alarm(0);
                     return 1;
                 }
-                else
-                {
-                    max_wait++;
-                    continue;
-                }
             }
-            else
-            {
-                continue;
-            }
+            max_wait++;
         }
         printf("Receptor perspective: Connection unsuccessfully closed\n");
+        alarm(0);
         return -1;
     }
-
     perror("Invalid agent.\n");
     return -1;
 }

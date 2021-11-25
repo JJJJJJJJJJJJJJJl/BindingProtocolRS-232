@@ -1,6 +1,9 @@
 #define BAUDRATE B38400
 
 #define FLAG 0x7e
+#define LEAK 0x7d
+#define FLAGXOR 0x5e //FLAG ^ 0x20
+#define LEAKXOR 0x5d //LEAK ^ 0x20
 #define A 0x03
 #define CSET 0x03
 #define CUA 0x07
@@ -12,9 +15,8 @@
 #define BCCRR A ^ CRR
 #define BCCREJ A ^ CREJ
 #define BCCDISC A ^ CDISC
-#define BCCI 0x02
 
-#define MAX_SIZE 10
+#define MAX_SIZE 1500
 
 typedef struct
 {
