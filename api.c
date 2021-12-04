@@ -12,6 +12,26 @@
 #include "api.h"
 #include "protocol.h"
 
+//establishing connection frames
+linkLayer SET_FRAME = {3, 3, {FLAG, A, CSET, BCCSET, FLAG}};
+linkLayer UA_FRAME = {3, 3, {FLAG, A, CUA, BCCUA, FLAG}};
+
+//information frames
+linkLayer DATA_FRAME = {2, 3, {}};
+
+//verifying information frames
+char RR[5] = {FLAG, A, CRR, BCCRR, FLAG};
+char REJ[5] = {FLAG, A, CREJ, BCCREJ, FLAG};
+
+//disconnect frame
+linkLayer DISC_FRAME = {3, 3, {FLAG, A, CDISC, BCCDISC, FLAG}};
+
+char *last_i_frame;
+
+struct termios oldtio, newtio;
+struct pollfd pfds[1];
+int connection;
+
 int cur_transmission, flag;
 void pickup()
 {
@@ -45,24 +65,6 @@ char *decimal_to_binary(int n)
     *(p + t) = '\0';
     return p;
 }
-
-//establishing connection frames
-linkLayer SET_FRAME = {3, 3, {FLAG, A, CSET, BCCSET, FLAG}};
-linkLayer UA_FRAME = {3, 3, {FLAG, A, CUA, BCCUA, FLAG}};
-
-//information frames
-linkLayer DATA_FRAME = {2, 3, {}};
-
-//verifying information frames
-char RR[5] = {FLAG, A, CRR, BCCRR, FLAG};
-char REJ[5] = {FLAG, A, CREJ, BCCREJ, FLAG};
-
-//disconnect frame
-linkLayer DISC_FRAME = {3, 3, {FLAG, A, CDISC, BCCDISC, FLAG}};
-
-struct termios oldtio, newtio;
-struct pollfd pfds[1];
-int connection;
 
 int llopen(char *port, int agent)
 {
@@ -605,6 +607,7 @@ int llread(int fd, char *buffer)
     int len = 519;
     int read_bytes;
     char i_frame[len + 1];
+    last_i_frame = malloc(sizeof(char) * (len + 1));
 
     int y = 0;
     while (1)
@@ -624,6 +627,7 @@ int llread(int fd, char *buffer)
         {
             read_bytes = read(fd, i_frame, len + 1);
         }
+        tcflush(fd, TCIOFLUSH);
 
         if (read_bytes < 1)
         {
@@ -634,7 +638,13 @@ int llread(int fd, char *buffer)
             continue;
         }
 
-        tcflush(fd, TCIOFLUSH);
+        //checking for duplicates
+        if (strcmp(last_i_frame, i_frame) == 0)
+        {
+            continue;
+        }
+
+        memcpy(last_i_frame, i_frame, sizeof(i_frame));
 
         len = read_bytes - 1;
         //verify data frame
