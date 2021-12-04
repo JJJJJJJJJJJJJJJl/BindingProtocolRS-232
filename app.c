@@ -159,7 +159,6 @@ int main(int argc, char **argv)
       }
 
       char received_bytes[1000];
-      char last_received_bytes[1000];
       int bytes_passed = 0;
       int llread_result;
       int a = 0;
@@ -173,16 +172,14 @@ int main(int argc, char **argv)
         }
         if (llread_result > -1)
         {
-          if (k == 0 || (compareArray(received_bytes, last_received_bytes, strlen(received_bytes) + 1) == 1 && k != 0))
+          for (int j = 0; j < llread_result - 1; j++)
           {
-            for (int j = 0; j < llread_result - 1; j++)
-            {
 
-              if (a > 0)
-                fputc(received_bytes[j], new_file);
-              a++;
+            if (a > 0)
+            {
+              fputc(received_bytes[j], new_file);
             }
-            memcpy(received_bytes, last_received_bytes, strlen(received_bytes) + 1);
+            a++;
           }
         }
         if (llread_result < bytes_passed)

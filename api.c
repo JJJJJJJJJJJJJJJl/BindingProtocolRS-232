@@ -528,7 +528,7 @@ int llwrite(int fd, char *bytes, int length)
         }
     }
     DATA_FRAME.frame[(length << 1) + 4 + 1] = (char)strtol(BCCI, NULL, 2);
-
+    //DATA BCC STUFFING
     if (DATA_FRAME.frame[(length << 1) + 4 + 1] == FLAG)
     {
         DATA_FRAME.frame[(length << 1) + 4 + 1] = LEAK;
@@ -543,6 +543,7 @@ int llwrite(int fd, char *bytes, int length)
     {
         DATA_FRAME.frame[(length << 1) + 4 + 2] = 0;
     }
+
     DATA_FRAME.frame[(length << 1) + 4 + 3] = FLAG;
 
     int write_bytes, read_bytes;
@@ -551,16 +552,16 @@ int llwrite(int fd, char *bytes, int length)
     (void)signal(SIGALRM, pickup);
     while (cur_transmission < DATA_FRAME.numTransmissions)
     {
-        alarm(DATA_FRAME.timeout);
+
+        alarm(DATA_FRAME.timeout + 5);
         //send I frame
         write_bytes = write(fd, DATA_FRAME.frame, (length << 1) + 4 + 4);
-
         char response[5];
         //receive RR or REJ
         int poll_res = poll(pfds, 1, 5000);
         if (poll_res < 1)
         {
-            alarm(0);
+            printf("yep?\n");
             return -1;
         }
         else if (pfds[0].revents && POLLIN)
@@ -592,6 +593,7 @@ int llwrite(int fd, char *bytes, int length)
             printf("RR/REJ frame had errors\n");
             cur_transmission++;
         }
+        printf("cur_transmission: %d\n", cur_transmission);
     }
     alarm(0);
     return write_bytes;
@@ -604,49 +606,102 @@ int llread(int fd, char *buffer)
     int read_bytes;
     char i_frame[len + 1];
 
-    //read I frame
-    int poll_res = poll(pfds, 1, DATA_FRAME.timeout * 1000);
-    if (poll_res < 0)
+    int y = 0;
+    while (1)
     {
-        return -2;
-    }
-    else if (poll_res == 0)
-    {
-        printf("Port had no data to be read\n");
-        return -2;
-    }
-    else if (pfds[0].revents && POLLIN)
-    {
-        read_bytes = read(fd, i_frame, len + 1);
-    }
+        //read I frame
+        int poll_res = poll(pfds, 1, DATA_FRAME.timeout * 1000);
+        if (poll_res < 0)
+        {
+            return -2;
+        }
+        else if (poll_res == 0)
+        {
+            printf("Port had no data to be read\n");
+            return -2;
+        }
+        else if (pfds[0].revents && POLLIN)
+        {
+            read_bytes = read(fd, i_frame, len + 1);
+        }
 
-    //verify data frame
-    if (i_frame[0] != FLAG || i_frame[1] != A || i_frame[2] != CSET || i_frame[3] != (BCCSET) || i_frame[len] != FLAG)
-    {
-        printf("Frame had errors\n");
-        write(fd, REJ, 5);
-        return -1;
-    }
+        if (read_bytes < 1)
+        {
+            if (++y > 2)
+            {
+                break;
+            }
+            continue;
+        }
 
-    for (int j = 4, k = 0; j < read_bytes - 3 && k < (read_bytes - 8) >> 1; j += 2, k++)
-    {
-        //DESTUFFING
-        if (i_frame[j] == LEAK && i_frame[j + 1] == FLAGXOR)
+        tcflush(fd, TCIOFLUSH);
+
+        len = read_bytes - 1;
+        //verify data frame
+        if (i_frame[0] != FLAG || i_frame[1] != A || i_frame[2] != CSET || i_frame[3] != (BCCSET) || i_frame[len] != FLAG)
+        {
+            printf("Frame had errors\n");
+            write(fd, REJ, 5);
+            return -1;
+        }
+        char binary_strings[(read_bytes - 7) >> 1][8];
+        int j, k;
+        for (j = 4, k = 0; j < read_bytes - 3 && k < (read_bytes - 8) >> 1; j += 2, k++)
+        {
+            //DESTUFFING
+            if (i_frame[j] == LEAK && i_frame[j + 1] == FLAGXOR)
+            {
+                buffer[k] = FLAG;
+            }
+            else if (i_frame[j] == LEAK && i_frame[j + 1] == LEAKXOR)
+            {
+                buffer[k] = LEAK;
+            }
+            else
+            {
+                buffer[k] = i_frame[j];
+            }
+            strcpy(binary_strings[k], decimal_to_binary(buffer[k]));
+        }
+
+        //DATA BCC DESTUFFING
+        if (i_frame[len - 2] == LEAK && i_frame[len - 1] == FLAGXOR)
         {
             buffer[k] = FLAG;
         }
-        else if (i_frame[j] == LEAK && i_frame[j + 1] == LEAKXOR)
+        else if (i_frame[len - 2] == LEAK && i_frame[len - 1] == LEAKXOR)
         {
             buffer[k] = LEAK;
         }
         else
         {
-            buffer[k] = i_frame[j];
+            buffer[k] = i_frame[len - 2];
         }
-    }
 
-    write(fd, RR, 5);
-    return (read_bytes - 6) >> 1;
+        char BCCI[8];
+        strcpy(BCCI, decimal_to_binary(buffer[k]));
+        //validating DATA BCC
+        for (int j = 0; j < 8; j++)
+        {
+            int ones = 0;
+            for (int k = 0; k < (read_bytes - 7) >> 1; k++)
+            {
+                if (binary_strings[j][k] == '1')
+                {
+                    ones++;
+                }
+            }
+            if ((ones % 2 == 0 && BCCI[j] == '1') || (ones % 2 != 0 && BCCI[j] == '0'))
+            {
+                printf("Invalid DATA BCC\n");
+                write(fd, REJ, 5);
+                return -1;
+            }
+        }
+        write(fd, RR, 5);
+        return (read_bytes - 6) >> 1;
+    }
+    return -1;
 }
 
 int llclose(int fd, int agent)
