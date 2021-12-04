@@ -151,6 +151,7 @@ int main(int argc, char **argv)
     //receptor
     else if (agent == 2)
     {
+
       FILE *new_file;
       if ((new_file = fopen("received_arrow_down.png", "wb")) == NULL)
       {
