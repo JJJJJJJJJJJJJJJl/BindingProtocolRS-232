@@ -641,6 +641,7 @@ int llread(int fd, char *buffer)
         //checking for duplicates
         if (strcmp(last_i_frame, i_frame) == 0)
         {
+            write(fd, RR, 5);
             continue;
         }
 
