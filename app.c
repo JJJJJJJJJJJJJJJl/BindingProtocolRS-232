@@ -15,7 +15,7 @@
 #include <limits.h>
 #include "api.h"
 
-#define MAX_FILE_SIZE 50000
+#define MAX_FILE_SIZE 1000000
 
 int get_file_bytes(FILE *file)
 {
@@ -152,7 +152,7 @@ int main(int argc, char **argv)
     else if (agent == 2)
     {
       FILE *new_file;
-      if ((new_file = fopen("received_arrow_down.png", "wb")) == NULL)
+      if ((new_file = fopen("received_big.png", "wb")) == NULL)
       {
         printf("Error opening new file\n");
         exit(1);

@@ -37,7 +37,6 @@ void pickup()
 {
     flag = 1;
     cur_transmission++;
-    printf("fodase\n");
 }
 
 char *decimal_to_binary(int n)
@@ -122,7 +121,6 @@ int llopen(char *port, int agent)
             {
                 bytes = write(PORT, SET_FRAME.frame, 5);
             }
-
             flag = 0;
             alarm(SET_FRAME.timeout);
 
@@ -271,8 +269,8 @@ int llopen(char *port, int agent)
                 }
             }
             tcflush(PORT, TCIOFLUSH);
-            cur_transmission++;
         }
+        return -1;
     }
     else if (agent == 2)
     {
