@@ -83,10 +83,6 @@ int main(int argc, char **argv)
   //proceed to data transmission
   else
   {
-    //size of file in bytes
-    int file_size_bytes;
-    //array containing every byte of the file
-    char DATA[MAX_FILE_SIZE];
     int cur_byte = 1;
 
     //issuer
@@ -106,6 +102,8 @@ int main(int argc, char **argv)
         printf("File '%s' opened\n", file_name);
       }
 
+      //size of file in bytes
+      int file_size_bytes;
       //number of bytes of file
       file_size_bytes = get_file_bytes(file);
 
@@ -116,6 +114,8 @@ int main(int argc, char **argv)
         exit(1);
       }
 
+      //array containing every byte of the file
+      char DATA[file_size_bytes];
       printf("File size: %d bytes\n", file_size_bytes);
 
       char byte[1];
