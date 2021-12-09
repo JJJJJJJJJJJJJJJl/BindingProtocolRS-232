@@ -152,7 +152,7 @@ int main(int argc, char **argv)
     else if (agent == 2)
     {
       FILE *new_file;
-      if ((new_file = fopen("received_big.png", "wb")) == NULL)
+      if ((new_file = fopen("received_file.gif", "wb")) == NULL)
       {
         printf("Error opening new file\n");
         exit(1);

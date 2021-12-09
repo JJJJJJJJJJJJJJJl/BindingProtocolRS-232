@@ -26,8 +26,10 @@ char REJ[5] = {FLAG, A, CREJ, BCCREJ, FLAG};
 //disconnect frame
 linkLayer DISC_FRAME = {3, 3, {FLAG, A, CDISC, BCCDISC, FLAG}};
 
+//in case it receives a duplicate
 char *last_i_frame;
 
+//port/connection structures/variables
 struct termios oldtio, newtio;
 struct pollfd pfds[1];
 int connection;
@@ -141,12 +143,12 @@ int llopen(char *port, int agent)
                 poll_res = poll(pfds, 1, SET_FRAME.timeout * 1000);
                 if (poll_res < 0)
                 {
-                    perror("Either poll() failed or alarm went off\n");
+                    fprintf(stderr, "Either poll() failed or alarm went off\n");
                     break;
                 }
                 else if (poll_res == 0)
                 {
-                    fprintf(stderr, "Port had no data to be read.\n");
+                    printf("Port had no data to be read.\n");
                     break;
                 }
                 else
@@ -336,7 +338,7 @@ int llopen(char *port, int agent)
                 poll_res = poll(pfds, 1, UA_FRAME.timeout * 1000);
                 if (poll_res < 0)
                 {
-                    perror("poll() failed\n");
+                    fprintf(stderr, "Either poll() failed or alarm went off\n");
                     break;
                 }
                 else if (poll_res == 0)
@@ -460,7 +462,7 @@ int llopen(char *port, int agent)
                 {
                     bytes = write(PORT, UA_FRAME.frame, 5);
                 }
-                fprintf(stderr, "Receptor perspective: Connection has been established\n");
+                printf("Receptor perspective: Connection has been established\n");
                 alarm(0);
                 return PORT;
             }
@@ -476,7 +478,7 @@ int llopen(char *port, int agent)
         }
     }
 
-    perror("Invalid agent.\n");
+    fprintf(stderr, "Invalid agent.\n");
     return -1;
 }
 
@@ -553,16 +555,22 @@ int llwrite(int fd, char *bytes, int length)
     while (cur_transmission < DATA_FRAME.numTransmissions)
     {
 
-        alarm(DATA_FRAME.timeout + 5);
+        alarm(DATA_FRAME.timeout);
         //send I frame
         write_bytes = write(fd, DATA_FRAME.frame, (length << 1) + 4 + 4);
         char response[5];
         //receive RR or REJ
-        int poll_res = poll(pfds, 1, 5000);
-        if (poll_res < 1)
+        int poll_res = poll(pfds, 1, DATA_FRAME.timeout);
+        if (poll_res < 0)
         {
-            printf("yep?\n");
+            fprintf(stderr, "Either poll() failed or alarm went off\n");
             return -1;
+        }
+        else if (poll_res == 0)
+        {
+            fprintf(stderr, "Port had no data to be read\n");
+            cur_transmission++;
+            continue;
         }
         else if (pfds[0].revents && POLLIN)
         {
@@ -579,21 +587,20 @@ int llwrite(int fd, char *bytes, int length)
             }
             else if (response[2] == CREJ && response[3] == (BCCREJ))
             {
-                printf("REJ: Frame was rejected\n");
+                fprintf(stderr, "REJ: Frame was rejected\n");
                 cur_transmission++;
             }
             else
             {
-                printf("RR/REJ frame had errors\n");
+                fprintf(stderr, "RR/REJ frame had errors\n");
                 cur_transmission++;
             }
         }
         else
         {
-            printf("RR/REJ frame had errors\n");
+            fprintf(stderr, "RR/REJ frame had errors\n");
             cur_transmission++;
         }
-        printf("cur_transmission: %d\n", cur_transmission);
     }
     alarm(0);
     return write_bytes;
@@ -618,8 +625,9 @@ int llread(int fd, char *buffer)
         }
         else if (poll_res == 0)
         {
-            printf("Port had no data to be read\n");
-            return -2;
+            fprintf(stderr, "Port had no data to be read\n");
+            //return -2;
+            continue;
         }
         else if (pfds[0].revents && POLLIN)
         {
@@ -649,7 +657,7 @@ int llread(int fd, char *buffer)
         //verify data frame
         if (i_frame[0] != FLAG || i_frame[1] != A || i_frame[2] != CSET || i_frame[3] != (BCCSET) || i_frame[len] != FLAG)
         {
-            printf("Frame had errors\n");
+            fprintf(stderr, "Frame had errors\n");
             write(fd, REJ, 5);
             return -1;
         }
@@ -702,7 +710,7 @@ int llread(int fd, char *buffer)
             }
             if ((ones % 2 == 0 && BCCI[j] == '1') || (ones % 2 != 0 && BCCI[j] == '0'))
             {
-                printf("Invalid DATA BCC\n");
+                fprintf(stderr, "Invalid DATA BCC\n");
                 write(fd, REJ, 5);
                 return -1;
             }
@@ -730,24 +738,38 @@ int llclose(int fd, int agent)
             int poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
             if (poll_res < 0)
             {
-                printf("Poll() failed or alarm went off\n");
+                fprintf(stderr, "Either poll() failed or alarm went off\n");
                 continue;
             }
+
             else if (poll_res == 0)
             {
-                printf("Port had no data to be read\n");
-            }
-            else if (pfds[0].revents && POLLIN)
-            {
-                read_bytes = read(fd, response, 5);
+                fprintf(stderr, "Port had no data to be read\n");
+                continue;
             }
 
-            if (read_bytes == 5 && response[0] == FLAG && response[1] == A && response[2] == CDISC && response[3] == (BCCDISC) && response[4] == FLAG)
+            else
             {
-                write(fd, UA_FRAME.frame, 5);
-                close(fd);
-                alarm(0);
-                return 1;
+                if (pfds[0].revents && POLLIN)
+                {
+                    read_bytes = read(fd, response, 5);
+
+                    if (read_bytes == 5 && response[0] == FLAG && response[1] == A && response[2] == CDISC && response[3] == (BCCDISC) && response[4] == FLAG)
+                    {
+                        write(fd, UA_FRAME.frame, 5);
+                        close(fd);
+                        alarm(0);
+                        return 1;
+                    }
+                    else
+                    {
+                        fprintf(stderr, "LLCLOSE: Error reading frame or frame had errors\n");
+                    }
+                }
+                else
+                {
+                    fprintf(stderr, "LLCLOSE: No event occured\n");
+                }
             }
         }
         printf("Issuer perspective: Connection unsuccessfully closed\n");
@@ -770,11 +792,11 @@ int llclose(int fd, int agent)
             int poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
             if (poll_res < 0)
             {
-                printf("Poll() failed or alarm went off\n");
+                fprintf(stderr, "Poll() failed or alarm went off\n");
             }
             else if (poll_res == 0)
             {
-                printf("Port had no data to be read\n");
+                fprintf(stderr, "Port had no data to be read\n");
             }
             else if (pfds[0].revents && POLLIN)
             {
