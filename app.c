@@ -152,7 +152,7 @@ int main(int argc, char **argv)
     else if (agent == 2)
     {
       FILE *new_file;
-      if ((new_file = fopen("received_file.gif", "wb")) == NULL)
+      if ((new_file = fopen("received_big.png", "wb")) == NULL)
       {
         printf("Error opening new file\n");
         exit(1);
@@ -162,11 +162,11 @@ int main(int argc, char **argv)
       int bytes_passed = 0;
       int llread_result;
       int a = 0;
-      int k = 0;
+      int success = 0;
       printf("Ready to receive file\n");
       while ((llread_result = llread(PORT, received_bytes)) > -2)
       {
-        if (k == 0)
+        if (a == 0)
         {
           bytes_passed = llread_result;
         }
@@ -182,14 +182,15 @@ int main(int argc, char **argv)
             a++;
           }
         }
+        //break when last bytes are received
         if (llread_result < bytes_passed)
         {
+          success = 1;
           break;
         }
-        k++;
       }
 
-      printf("File successfully received\n");
+      success == 1 ? printf("File successfully received\n") : printf("File unsuccessfully received\n");
       fclose(new_file);
 
       llclose(PORT, 2) > 0 ? printf("Receptor perspective: Connection successfully closed\n") : printf("Receptor perspective: Connection unsuccessfully closed\n");

@@ -614,7 +614,7 @@ int llread(int fd, char *buffer)
     char i_frame[len + 1];
     last_i_frame = malloc(sizeof(char) * (len + 1));
 
-    int y = 0;
+    int ct = 0;
     while (1)
     {
         //read I frame
@@ -637,7 +637,7 @@ int llread(int fd, char *buffer)
 
         if (read_bytes < 1)
         {
-            if (++y > 2)
+            if (++ct > 2)
             {
                 break;
             }
@@ -718,6 +718,8 @@ int llread(int fd, char *buffer)
         write(fd, RR, 5);
         return (read_bytes - 6) >> 1;
     }
+
+    fprintf(stderr, "Unsuccessful attemp to receive frame\n");
     return -1;
 }
 
