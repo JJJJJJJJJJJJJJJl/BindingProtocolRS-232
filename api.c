@@ -552,6 +552,13 @@ int llwrite(int fd, char *bytes, int length)
 
     cur_transmission = 0;
     (void)signal(SIGALRM, pickup);
+        
+    //Se se tratar duma nova trama, o campo de dados é aceite (e passado à Aplicação), e a trama deve ser confirmada com RR
+    //Ns = 0
+
+    //Se se tratar dum duplicado, o campo de dados é descartado, mas deve fazer-se confirmação da trama com RR
+    //Nr = 1
+    
     while (cur_transmission < DATA_FRAME.numTransmissions)
     {
 
@@ -650,6 +657,14 @@ int llread(int fd, char *buffer)
             write(fd, RR, 5);
             continue;
         }
+        
+        //Tramas I recebidas sem erros detectados no cabeçalho e no campo de dados são aceites para processamento
+        
+        //Se se tratar duma nova trama, o campo de dados é aceite (e passado à Aplicação), e a trama deve ser confirmada com RR
+        //Nr = 1
+
+        //Se se tratar dum duplicado, o campo de dados é descartado, mas deve fazer-se confirmação da trama com RR
+        //Nr = 0
 
         memcpy(last_i_frame, i_frame, sizeof(i_frame));
 
