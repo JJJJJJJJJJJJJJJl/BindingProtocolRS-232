@@ -13,8 +13,8 @@
 #include "protocol.h"
 
 //establishing connection frames
-linkLayer SET_FRAME = {3, 3, {FLAG, A, CSET, BCCSET, FLAG}};
-linkLayer UA_FRAME = {3, 3, {FLAG, A, CUA, BCCUA, FLAG}};
+linkLayer SET_FRAME = {5, 3, {FLAG, A, CSET, BCCSET, FLAG}};
+linkLayer UA_FRAME = {5, 3, {FLAG, A, CUA, BCCUA, FLAG}};
 
 //information frames
 linkLayer DATA_FRAME = {2, 3, {}};
@@ -37,6 +37,7 @@ int connection;
 int cur_transmission, flag;
 void pickup()
 {
+    printf("alarm\n");
     flag = 1;
     cur_transmission++;
 }
@@ -140,9 +141,10 @@ int llopen(char *port, int agent)
                 // - a file descriptor becomes ready
                 // - the call is interrupted by a signal handler
                 // - the timeout expires
-                poll_res = poll(pfds, 1, SET_FRAME.timeout * 1000);
+                poll_res = poll(pfds, 1, SET_FRAME.timeout * 500);
                 if (poll_res < 0)
                 {
+                    
                     fprintf(stderr, "Either poll() failed or alarm went off\n");
                     break;
                 }
@@ -312,7 +314,6 @@ int llopen(char *port, int agent)
 
         int machine_state = 0, set_frame_received = 0;
         char set_frame_receptor[1], set_frame[5];
-
         (void)signal(SIGALRM, pickup);
         //ESTABLISHING CONNECTION
         while (connection != 1)
@@ -335,9 +336,10 @@ int llopen(char *port, int agent)
                 // - a file descriptor becomes ready
                 // - the call is interrupted by a signal handler
                 // - the timeout expires
-                poll_res = poll(pfds, 1, UA_FRAME.timeout * 1000);
+                poll_res = poll(pfds, 1, UA_FRAME.timeout * 500);
                 if (poll_res < 0)
                 {
+                    fprintf(stderr, "poll= %d\n", poll_res);
                     fprintf(stderr, "Either poll() failed or alarm went off\n");
                     break;
                 }
@@ -560,7 +562,7 @@ int llwrite(int fd, char *bytes, int length)
         write_bytes = write(fd, DATA_FRAME.frame, (length << 1) + 4 + 4);
         char response[5];
         //receive RR or REJ
-        int poll_res = poll(pfds, 1, DATA_FRAME.timeout);
+        int poll_res = poll(pfds, 1, DATA_FRAME.timeout*1000);
         if (poll_res < 0)
         {
             fprintf(stderr, "Either poll() failed or alarm went off\n");
@@ -611,6 +613,7 @@ int llread(int fd, char *buffer)
     //((length + 1) << 1) + 5
     int len = 519;
     int read_bytes;
+    int k;
     char i_frame[len + 1];
     last_i_frame = malloc(sizeof(char) * (len + 1));
 
@@ -618,7 +621,7 @@ int llread(int fd, char *buffer)
     while (1)
     {
         //read I frame
-        int poll_res = poll(pfds, 1, DATA_FRAME.timeout * 1000);
+        int poll_res = poll(pfds, 1, DATA_FRAME.timeout * 500);
         if (poll_res < 0)
         {
             return -2;
@@ -626,13 +629,25 @@ int llread(int fd, char *buffer)
         else if (poll_res == 0)
         {
             fprintf(stderr, "Port had no data to be read\n");
-            //return -2;
             continue;
         }
         else if (pfds[0].revents && POLLIN)
         {
-            read_bytes = read(fd, i_frame, len + 1);
+            char byte[1];
+            k = 0;
+            while(1){
+                int a = read(fd, byte, 1);
+                if(a == 1){
+                    i_frame[k] = byte[0];
+                    if(k != 0 && i_frame[k] == FLAG){
+                        i_frame[k] = byte[0];
+                        break;
+                    }
+                    k++;
+                }
+            }
         }
+        read_bytes = k + 1;
         tcflush(fd, TCIOFLUSH);
 
         if (read_bytes < 1)
@@ -657,6 +672,7 @@ int llread(int fd, char *buffer)
         //verify data frame
         if (i_frame[0] != FLAG || i_frame[1] != A || i_frame[2] != CSET || i_frame[3] != (BCCSET) || i_frame[len] != FLAG)
         {
+            printf("%d | %d | %d | %d | %d | %d\n",i_frame[0],i_frame[1],i_frame[2],i_frame[3],i_frame[len], len);
             fprintf(stderr, "Frame had errors\n");
             write(fd, REJ, 5);
             return -1;
@@ -737,7 +753,7 @@ int llclose(int fd, int agent)
 
             char response[5];
 
-            int poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
+            int poll_res = poll(pfds, 1, DISC_FRAME.timeout * 500);
             if (poll_res < 0)
             {
                 fprintf(stderr, "Either poll() failed or alarm went off\n");
@@ -766,7 +782,9 @@ int llclose(int fd, int agent)
                     else
                     {
                         fprintf(stderr, "LLCLOSE: Error reading frame or frame had errors\n");
+                        return 0;
                     }
+                    
                 }
                 else
                 {
@@ -791,7 +809,7 @@ int llclose(int fd, int agent)
 
             char response[5];
 
-            int poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
+            int poll_res = poll(pfds, 1, DISC_FRAME.timeout * 500);
             if (poll_res < 0)
             {
                 fprintf(stderr, "Poll() failed or alarm went off\n");
@@ -810,7 +828,7 @@ int llclose(int fd, int agent)
             {
                 write(fd, DISC_FRAME.frame, 5);
 
-                poll_res = poll(pfds, 1, DISC_FRAME.timeout * 1000);
+                poll_res = poll(pfds, 1, DISC_FRAME.timeout * 500);
                 if (poll_res < 1)
                 {
                     return -1;
