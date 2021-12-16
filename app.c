@@ -36,17 +36,6 @@ char *slice_array(char *array, int start, int end)
   return slice;
 }
 
-char compareArray(char *a, char *b, int size)
-{
-  int i;
-  for (i = 0; i < size; i++)
-  {
-    if (a[i] != b[i])
-      return 1;
-  }
-  return 0;
-}
-
 int main(int argc, char **argv)
 {
 
